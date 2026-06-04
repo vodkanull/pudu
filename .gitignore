@@ -1,0 +1,13 @@
+# Protocolos generados
+pudu/protocols/generated/*
+
+# Archivos de compilación
+pudu/build/
+
+# Archivos temporales del editor
+*.swp
+*.swo
+*~
+
+# Archivos del sistema
+.DS_Store

@@ -1,0 +1,35 @@
+# Autostart
+# exec = swaybg -i ~/wallpaper.jpg
+# exec = waybar
+# exec = mako
+
+# UI
+$mod = Super_L
+
+ui {
+    inner_gap = 6
+    outer_gap = 6
+    active_border_size = 2
+    active_border_color = #c59b3a
+    inactive_border_color = #1c1c1c
+    border_transition_ms = 100
+    border_radius = 8
+    new_is_master = false
+    workspace_count = 5
+}
+
+# Binds
+bind = $mod, Left, workspace_prev
+bind = $mod, Right, workspace_next
+bind = $mod+Shift, Left, move_workspace_prev
+bind = $mod+Shift, Right, move_workspace_next
+
+bind = $mod, C, close
+bind = $mod, Escape, exit
+
+bind = $mod, Return, exec, kitty
+
+# Input
+input {
+    natural_scroll = true
+}
