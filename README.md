@@ -28,7 +28,7 @@ sudo pacman -S base-devel git wlroots wayland libxkbcommon libinput
 
 ```bash
 git clone https://github.com/vodkanull/pudu.git
-cd pudu
+cd pudu/pudu
 make
 sudo cp build/pudu /usr/local/bin/
 ```
