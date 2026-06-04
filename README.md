@@ -1,9 +1,9 @@
-<div align="center">
+<!--<div align="center">
   <img src="media/pudu.png" alt="Logo" width="140"/>
-</div>
+</div>-->
 
 > [!NOTE]
-> **pudu** is a minimal tiling Wayland Compositor built on top of wlroots.
+> 🦌 **pudu** is a minimal tiling Wayland Compositor built on top of wlroots.
 > It's just a hobby project, so take it easy.
 
 <div align="center">
@@ -40,7 +40,7 @@ sudo cp build/pudu /usr/local/bin/
 > The default keybind `Super + Enter` opens **kitty**. If kitty is not installed, nothing will happen. You can change this in your config.
 
 > [!TIP]
-> You can see an example of the configuration file 👉 [here](https://github.com/vodkanull/null/blob/main/pudu/config) 👈.
+> 🦌 You can see an example of the configuration file 👉 [here](https://github.com/vodkanull/pudu/blob/main/pudu/config) 👈.
 
 ## License
 pudu is licensed under the [GPL v3.0](LICENSE) license.
