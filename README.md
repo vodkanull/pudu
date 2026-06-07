@@ -6,9 +6,12 @@
 > 🦌 **pudu** is a minimal tiling Wayland Compositor built on top of wlroots.
 > It's just a hobby project, so take it easy.
 
-<div align="center">
+<!--<div align="center">
   <img src="media/screenshot.png" alt="Screenshot" width="100%"/>
-</div>
+</div>-->
+
+<video src="https://github.com/user-attachments/assets/6f277ee5-7229-4e06-b8ca-f1c0c743a3d1" autoplay loop muted playsinline width="100%"></video>
+
 
 > [!CAUTION]
 > XWayland is **not supported** and this is intentional. pudu is a pure Wayland compositor.

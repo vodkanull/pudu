@@ -10,7 +10,7 @@ ui {
     inner_gap = 5
     outer_gap = 5
     active_border_size = 2
-    active_border_color = #285577
+    active_border_color = #ff0062
     inactive_border_color = #222222
     new_is_master = false
     workspace_count = 5
