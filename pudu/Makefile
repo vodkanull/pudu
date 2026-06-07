@@ -61,7 +61,7 @@ $(PROTO_OBJ): $(GEN_DIR)/ext-workspace-v1-protocol.c
 
 $(BUILD)/default_config.c: config
 	@mkdir -p $(BUILD)
-	xxd -i $< | sed 's/config/default_config/g' > $@
+	od -An -tx1 -v $< | awk 'BEGIN {printf "unsigned char default_config[] = {\n"; count=0} {for(i=1;i<=NF;i++) {if (count>0) printf ", "; printf "0x%s", $$i; count++}} END {printf "\n};\nunsigned int default_config_len = %d;\n", count}' > $@
 
 $(BUILD)/default_config.o: $(BUILD)/default_config.c
 	@mkdir -p $(BUILD)
@@ -69,7 +69,7 @@ $(BUILD)/default_config.o: $(BUILD)/default_config.c
 
 $(BUILD)/startup_sound.c: on.mp3
 	@mkdir -p $(BUILD)
-	xxd -i $< | sed 's/on_mp3/startup_sound/g' > $@
+	od -An -tx1 -v $< | awk 'BEGIN {printf "unsigned char startup_sound[] = {\n"; count=0} {for(i=1;i<=NF;i++) {if (count>0) printf ", "; printf "0x%s", $$i; count++}} END {printf "\n};\nunsigned int startup_sound_len = %d;\n", count}' > $@
 
 $(BUILD)/startup_sound.o: $(BUILD)/startup_sound.c
 	@mkdir -p $(BUILD)
