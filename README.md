@@ -21,7 +21,7 @@
 Before building, install the required packages:
 
 ```bash
-sudo pacman -S base-devel git wlroots wayland libxkbcommon libinput
+sudo pacman -S base-devel git wlroots0.19 wayland libxkbcommon libinput
 ```
 
 ## Building from source

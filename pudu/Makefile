@@ -24,7 +24,7 @@ STARTUP_SOUND_OBJ = $(BUILD)/startup_sound.o
 
 $(BUILD)/pudu: $(OBJS) $(PROTOCOLS) $(PROTO_OBJ) $(CONFIG_OBJ) $(STARTUP_SOUND_OBJ)
 	@mkdir -p $(BUILD)
-	$(CC) -o $@ $(OBJS) $(PROTO_OBJ) $(CONFIG_OBJ) $(STARTUP_SOUND_OBJ) $(CFLAGS) $(LIBS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(PROTO_OBJ) $(CONFIG_OBJ) $(STARTUP_SOUND_OBJ) $(LIBS)
 
 $(BUILD)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/pudu.h $(PROTOCOLS)
 	@mkdir -p $(BUILD)
