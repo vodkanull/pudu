@@ -206,8 +206,8 @@ int main(int argc, char *argv[]) {
 	server.lock_tree = wlr_scene_tree_create(&server.scene->tree);
 	wlr_scene_node_set_enabled(&server.lock_tree->node, false);
 
-	/* Default background color #111111 */
-	float bg_color[4] = {0.0667f, 0.0667f, 0.0667f, 1.0f};
+	/* Default background color #080808 */
+	float bg_color[4] = {0.0314f, 0.0314f, 0.0314f, 1.0f};
 	wlr_scene_rect_create(server.background_tree, 10000, 10000, bg_color);
 
 	wl_list_init(&server.toplevels);
