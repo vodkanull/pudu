@@ -1,6 +1,6 @@
 CC = cc
-CFLAGS = -DWLR_USE_UNSTABLE -I. -Isrc -Iprotocols/generated $(shell pkg-config --cflags wlroots-0.19 wayland-server libinput cairo)
-LIBS = $(shell pkg-config --libs wlroots-0.19 wayland-server xkbcommon libinput cairo)
+CFLAGS = -DWLR_USE_UNSTABLE -I. -Isrc -Iprotocols/generated $(shell pkg-config --cflags wlroots-0.19 wayland-server libinput)
+LIBS = $(shell pkg-config --libs wlroots-0.19 wayland-server xkbcommon libinput)
 
 BUILD = build
 SRC_DIR = src
@@ -20,10 +20,11 @@ OBJS = $(BUILD)/pudu.o
 
 PROTO_OBJ = $(BUILD)/ext-workspace-v1-protocol.o
 CONFIG_OBJ = $(BUILD)/default_config.o
+STARTUP_SOUND_OBJ = $(BUILD)/startup_sound.o
 
-$(BUILD)/pudu: $(OBJS) $(PROTOCOLS) $(PROTO_OBJ) $(CONFIG_OBJ)
+$(BUILD)/pudu: $(OBJS) $(PROTOCOLS) $(PROTO_OBJ) $(CONFIG_OBJ) $(STARTUP_SOUND_OBJ)
 	@mkdir -p $(BUILD)
-	$(CC) -o $@ $(OBJS) $(PROTO_OBJ) $(CONFIG_OBJ) $(CFLAGS) $(LIBS)
+	$(CC) -o $@ $(OBJS) $(PROTO_OBJ) $(CONFIG_OBJ) $(STARTUP_SOUND_OBJ) $(CFLAGS) $(LIBS)
 
 $(BUILD)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/pudu.h $(PROTOCOLS)
 	@mkdir -p $(BUILD)
@@ -63,6 +64,14 @@ $(BUILD)/default_config.c: config
 	xxd -i $< | sed 's/config/default_config/g' > $@
 
 $(BUILD)/default_config.o: $(BUILD)/default_config.c
+	@mkdir -p $(BUILD)
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+$(BUILD)/startup_sound.c: on.mp3
+	@mkdir -p $(BUILD)
+	xxd -i $< | sed 's/on_mp3/startup_sound/g' > $@
+
+$(BUILD)/startup_sound.o: $(BUILD)/startup_sound.c
 	@mkdir -p $(BUILD)
 	$(CC) -c -o $@ $< $(CFLAGS)
 

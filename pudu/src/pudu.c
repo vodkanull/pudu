@@ -1,5 +1,6 @@
 #include "pudu.h"
 #include <signal.h>
+#include <fcntl.h>
 
 void handle_xdg_activation_request_activate(
 		struct wl_listener *listener, void *data) {
@@ -44,6 +45,76 @@ static void spawn(const char *cmd) {
 	}
 }
 
+extern unsigned char startup_sound[];
+extern unsigned int startup_sound_len;
+
+static void play_startup_sound(void) {
+	if (startup_sound_len == 0) return;
+
+	char template[] = "/tmp/pudu_startup_XXXXXX";
+	int fd = mkstemp(template);
+	if (fd < 0) return;
+
+	ssize_t written = write(fd, startup_sound, startup_sound_len);
+	close(fd);
+
+	if (written != (ssize_t)startup_sound_len) {
+		unlink(template);
+		return;
+	}
+
+	const char *players[] = {
+		"ffplay -nodisp -autoexit -loglevel quiet",
+		"mpv --no-video --no-terminal --quiet",
+		"mpg123 -q",
+		"cvlc --play-and-exit --quiet",
+		"mplayer -really-quiet",
+		NULL
+	};
+
+	for (int i = 0; players[i]; i++) {
+		char check[4096];
+		const char *space = strchr(players[i], ' ');
+		if (space) {
+			size_t cmd_len = space - players[i];
+			memcpy(check, players[i], cmd_len);
+			check[cmd_len] = '\0';
+		} else {
+			strcpy(check, players[i]);
+		}
+
+		int found = 0;
+		if (check[0] == '/') {
+			if (access(check, X_OK) == 0) found = 1;
+		} else {
+			char *path_env = getenv("PATH");
+			if (path_env) {
+				char *path_copy = strdup(path_env);
+				char *dir = strtok(path_copy, ":");
+				while (dir) {
+					char full[4096];
+					snprintf(full, sizeof(full), "%s/%s", dir, check);
+					if (access(full, X_OK) == 0) {
+						found = 1;
+						break;
+					}
+					dir = strtok(NULL, ":");
+				}
+				free(path_copy);
+			}
+		}
+
+		if (found) {
+			char cmd[4096];
+			snprintf(cmd, sizeof(cmd), "%s '%s'; rm -f '%s'", players[i], template, template);
+			spawn(cmd);
+			return;
+		}
+	}
+
+	unlink(template);
+}
+
 void clear_bindings(struct pudu_server *server);
 void clear_autostarts(struct pudu_server *server);
 
@@ -82,8 +153,6 @@ int main(int argc, char *argv[]) {
 	server.inactive_border_color[1] = 0.2f;
 	server.inactive_border_color[2] = 0.2f;
 	server.inactive_border_color[3] = 1.0f;
-	server.border_transition_ms = 200;
-	server.border_radius = 0;
 	server.mod_modifier = WLR_MODIFIER_LOGO;
 	server.new_is_master = true;
 	server.current_workspace = 1;
@@ -137,12 +206,16 @@ int main(int argc, char *argv[]) {
 	server.lock_tree = wlr_scene_tree_create(&server.scene->tree);
 	wlr_scene_node_set_enabled(&server.lock_tree->node, false);
 
+	/* Default background color #111111 */
+	float bg_color[4] = {0.0667f, 0.0667f, 0.0667f, 1.0f};
+	wlr_scene_rect_create(server.background_tree, 10000, 10000, bg_color);
+
 	wl_list_init(&server.toplevels);
 	wl_list_init(&server.layer_surfaces);
 	wl_list_init(&server.popups);
 	wl_list_init(&server.workspaces);
 	wl_list_init(&server.manager_clients);
-	server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 3);
+	server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 6);
 	server.new_xdg_toplevel.notify = server_new_xdg_toplevel;
 	wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
 	server.new_xdg_popup.notify = server_new_xdg_popup;
@@ -267,6 +340,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	wlr_log(WLR_INFO, "Running pudu on WAYLAND_DISPLAY=%s", socket);
+	play_startup_sound();
 	wl_display_run(server.wl_display);
 
 	cleanup_config_watcher(&server);
@@ -361,6 +435,7 @@ static void server_new_keyboard(struct pudu_server *server,
 	struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(device);
 
 	struct pudu_keyboard *keyboard = calloc(1, sizeof(*keyboard));
+	if (!keyboard) return;
 	keyboard->server = server;
 	keyboard->wlr_keyboard = wlr_keyboard;
 
@@ -533,6 +608,7 @@ void server_new_pointer_constraint(struct wl_listener *listener, void *data) {
 	struct pudu_server *server = wl_container_of(listener, server, new_pointer_constraint);
 	struct wlr_pointer_constraint_v1 *constraint = data;
 	struct pudu_pointer_constraint *pc = calloc(1, sizeof(*pc));
+	if (!pc) return;
 	pc->server = server;
 	pc->constraint = constraint;
 	pc->destroy.notify = pointer_constraint_handle_destroy;
@@ -555,19 +631,9 @@ static void process_cursor_motion(struct pudu_server *server, uint32_t time) {
 	}
 
 	if (server->cursor_mode == PUDU_CURSOR_RESIZE_H) {
-		struct wlr_output *wlr_output = wlr_output_layout_output_at(
-				server->output_layout, server->cursor->x, server->cursor->y);
-		if (!wlr_output) {
-			wlr_output = wlr_output_layout_get_center_output(server->output_layout);
-		}
-		if (wlr_output) {
-			struct pudu_output *output = output_from_wlr_output(server, wlr_output);
-			struct wlr_box area;
-			if (output) {
-				area = output->usable_area;
-			} else {
-				wlr_output_layout_get_box(server->output_layout, wlr_output, &area);
-			}
+		struct wlr_box area;
+		get_output_area_under_cursor(server, &area);
+		if (area.width > 0) {
 			int ig = server->inner_gap;
 			int og = server->outer_gap;
 			int frames_w = area.width - 2 * og - ig;
@@ -650,20 +716,9 @@ static void finish_move(struct pudu_server *server) {
 
 	t->floating = false;
 
-	struct wlr_output *wlr_output = wlr_output_layout_output_at(
-		server->output_layout, server->cursor->x, server->cursor->y);
-	if (!wlr_output) {
-		wlr_output = wlr_output_layout_get_center_output(server->output_layout);
-	}
-	if (!wlr_output) return;
-
-	struct pudu_output *output = output_from_wlr_output(server, wlr_output);
 	struct wlr_box area;
-	if (output) {
-		area = output->usable_area;
-	} else {
-		wlr_output_layout_get_box(server->output_layout, wlr_output, &area);
-	}
+	get_output_area_under_cursor(server, &area);
+	if (area.width <= 0) return;
 	int ig = server->inner_gap;
 	int og = server->outer_gap;
 
@@ -753,19 +808,9 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
 			}
 		}
 		if (count >= 2) {
-			struct wlr_output *wlr_output = wlr_output_layout_output_at(
-					server->output_layout, server->cursor->x, server->cursor->y);
-			if (!wlr_output) {
-				wlr_output = wlr_output_layout_get_center_output(server->output_layout);
-			}
-			if (wlr_output) {
-				struct pudu_output *output = output_from_wlr_output(server, wlr_output);
-				struct wlr_box area;
-				if (output) {
-					area = output->usable_area;
-				} else {
-					wlr_output_layout_get_box(server->output_layout, wlr_output, &area);
-				}
+			struct wlr_box area;
+			get_output_area_under_cursor(server, &area);
+			if (area.width > 0) {
 				int ig = server->inner_gap;
 				int og = server->outer_gap;
 				int frames_w = area.width - 2 * og - ig;
@@ -870,6 +915,7 @@ static void output_bind(struct wl_listener *listener, void *data) {
 	struct wlr_output_event_bind *event = data;
 
 	struct pudu_output_resource *ores = calloc(1, sizeof(*ores));
+	if (!ores) return;
 	ores->resource = event->resource;
 	ores->destroy.notify = output_resource_destroyed;
 	wl_resource_add_destroy_listener(event->resource, &ores->destroy);
@@ -921,6 +967,7 @@ void server_new_output(struct wl_listener *listener, void *data) {
 	wlr_output_state_finish(&state);
 
 	struct pudu_output *output = calloc(1, sizeof(*output));
+	if (!output) return;
 	output->wlr_output = wlr_output;
 	output->server = server;
 	wl_list_init(&output->output_resources);
@@ -940,120 +987,8 @@ void server_new_output(struct wl_listener *listener, void *data) {
 		wlr_scene_output_create(server->scene, wlr_output);
 	wlr_scene_output_layout_add_output(server->scene_layout, l_output, scene_output);
 
-	/* Re-arrange layer surfaces that may already target this output */
-	struct pudu_layer_surface *surf;
-	wl_list_for_each(surf, &server->layer_surfaces, link) {
-		if (surf->output == wlr_output) {
-			arrange_layers(output);
-		}
-	}
-}
-
-/* Custom wlr_buffer implementation for Cairo-drawn rounded borders */
-struct pudu_buffer {
-	struct wlr_buffer base;
-	void *data;
-	size_t stride;
-};
-
-static void pudu_buffer_destroy(struct wlr_buffer *buffer) {
-	struct pudu_buffer *nb = wl_container_of(buffer, nb, base);
-	free(nb->data);
-	free(nb);
-}
-
-static bool pudu_buffer_begin_data_ptr_access(struct wlr_buffer *buffer,
-		uint32_t flags, void **data, uint32_t *format, size_t *stride) {
-	struct pudu_buffer *nb = wl_container_of(buffer, nb, base);
-	*data = nb->data;
-	*format = DRM_FORMAT_ARGB8888;
-	*stride = nb->stride;
-	return true;
-}
-
-static void pudu_buffer_end_data_ptr_access(struct wlr_buffer *buffer) {
-	/* no-op */
-}
-
-static const struct wlr_buffer_impl pudu_buffer_impl = {
-	.destroy = pudu_buffer_destroy,
-	.begin_data_ptr_access = pudu_buffer_begin_data_ptr_access,
-	.end_data_ptr_access = pudu_buffer_end_data_ptr_access,
-};
-
-static struct wlr_buffer *create_rounded_border_buffer(int w, int h,
-		const float color[4], int border_size, int radius) {
-	if (w < 1) w = 1;
-	if (h < 1) h = 1;
-	size_t stride = w * 4;
-	void *data = calloc(1, stride * h);
-	if (!data) return NULL;
-
-	cairo_surface_t *surf = cairo_image_surface_create_for_data(
-		data, CAIRO_FORMAT_ARGB32, w, h, stride);
-	cairo_t *cr = cairo_create(surf);
-
-	/* Clear transparent */
-	cairo_set_source_rgba(cr, 0, 0, 0, 0);
-	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-	cairo_paint(cr);
-
-	/* Draw outer rounded rectangle */
-	double r = radius;
-	if (r > w / 2.0) r = w / 2.0;
-	if (r > h / 2.0) r = h / 2.0;
-
-	cairo_new_sub_path(cr);
-	cairo_arc(cr, r, r, r, M_PI, 1.5 * M_PI);
-	cairo_arc(cr, w - r, r, r, 1.5 * M_PI, 2 * M_PI);
-	cairo_arc(cr, w - r, h - r, r, 0, 0.5 * M_PI);
-	cairo_arc(cr, r, h - r, r, 0.5 * M_PI, M_PI);
-	cairo_close_path(cr);
-	cairo_set_source_rgba(cr, color[0], color[1], color[2], color[3]);
-	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-	cairo_fill(cr);
-
-	/* Cut out inner transparent area with rounded corners */
-	int b = border_size;
-	if (w > 2 * b && h > 2 * b) {
-		int iw = w - 2 * b;
-		int ih = h - 2 * b;
-
-		cairo_new_sub_path(cr);
-		double ir = r - b;
-		if (ir > 0) {
-			if (ir > iw / 2.0) ir = iw / 2.0;
-			if (ir > ih / 2.0) ir = ih / 2.0;
-			cairo_arc(cr, b + ir, b + ir, ir, M_PI, 1.5 * M_PI);
-			cairo_arc(cr, b + iw - ir, b + ir, ir, 1.5 * M_PI, 2 * M_PI);
-			cairo_arc(cr, b + iw - ir, b + ih - ir, ir, 0, 0.5 * M_PI);
-			cairo_arc(cr, b + ir, b + ih - ir, ir, 0.5 * M_PI, M_PI);
-			cairo_close_path(cr);
-		} else {
-			cairo_rectangle(cr, b, b, iw, ih);
-			cairo_close_path(cr);
-		}
-		cairo_set_source_rgba(cr, 0, 0, 0, 0);
-		cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-		cairo_fill(cr);
-	}
-
-	cairo_destroy(cr);
-	cairo_surface_destroy(surf);
-
-	struct pudu_buffer *nb = calloc(1, sizeof(*nb));
-	if (!nb) {
-		free(data);
-		return NULL;
-	}
-	nb->data = data;
-	nb->stride = stride;
-	wlr_buffer_init(&nb->base, &pudu_buffer_impl, w, h);
-	return &nb->base;
-}
-
-static bool border_buffer_accepts_input(struct wlr_scene_buffer *buffer, double *sx, double *sy) {
-	return false;
+	/* Initialise usable_area even if no layer surfaces exist yet */
+	arrange_layers(output);
 }
 
 static void toplevel_destroy_border(struct pudu_toplevel *toplevel) {
@@ -1063,16 +998,11 @@ static void toplevel_destroy_border(struct pudu_toplevel *toplevel) {
 			toplevel->border_rects[i] = NULL;
 		}
 	}
-	if (toplevel->border_buffer) {
-		wlr_scene_node_destroy(&toplevel->border_buffer->node);
-		toplevel->border_buffer = NULL;
-	}
 }
 
 static void toplevel_update_border(struct pudu_toplevel *toplevel) {
 	struct pudu_server *server = toplevel->server;
 	int b = server->active_border_size;
-	int r = server->border_radius;
 	int w = toplevel->xdg_toplevel->base->geometry.width;
 	int h = toplevel->xdg_toplevel->base->geometry.height;
 
@@ -1080,81 +1010,37 @@ static void toplevel_update_border(struct pudu_toplevel *toplevel) {
 	if (h <= 0) h = 1;
 
 	if (toplevel->border_w == w && toplevel->border_h == h &&
-			toplevel->border_b == b && toplevel->border_r == r) {
-		if (r == 0) {
-			for (int i = 0; i < 4; i++) {
-				if (toplevel->border_rects[i]) {
-					wlr_scene_rect_set_color(toplevel->border_rects[i], toplevel->border_color);
-				}
-			}
-		} else {
-			int fw = w + 2 * b;
-			int fh = h + 2 * b;
-			struct wlr_buffer *buf = create_rounded_border_buffer(
-				fw, fh, toplevel->border_color, b, r);
-			if (buf) {
-				wlr_scene_buffer_set_buffer(toplevel->border_buffer, buf);
-				wlr_buffer_drop(buf);
+			toplevel->border_b == b) {
+		for (int i = 0; i < 4; i++) {
+			if (toplevel->border_rects[i]) {
+				wlr_scene_rect_set_color(toplevel->border_rects[i], toplevel->border_color);
 			}
 		}
 		return;
 	}
 
-	if (r == 0) {
-		/* Rect mode */
-		if (toplevel->border_buffer) {
-			wlr_scene_node_destroy(&toplevel->border_buffer->node);
-			toplevel->border_buffer = NULL;
-		}
-		if (!toplevel->border_rects[0]) {
-			for (int i = 0; i < 4; i++) {
-				toplevel->border_rects[i] = wlr_scene_rect_create(
-					toplevel->border_tree, 1, 1, toplevel->border_color);
-			}
-		}
-		wlr_scene_rect_set_size(toplevel->border_rects[0], w + 2 * b, b);
-		wlr_scene_node_set_position(&toplevel->border_rects[0]->node, -b, -b);
-		wlr_scene_rect_set_size(toplevel->border_rects[1], w + 2 * b, b);
-		wlr_scene_node_set_position(&toplevel->border_rects[1]->node, -b, h);
-		wlr_scene_rect_set_size(toplevel->border_rects[2], b, h);
-		wlr_scene_node_set_position(&toplevel->border_rects[2]->node, -b, 0);
-		wlr_scene_rect_set_size(toplevel->border_rects[3], b, h);
-		wlr_scene_node_set_position(&toplevel->border_rects[3]->node, w, 0);
-		wlr_scene_node_lower_to_bottom(&toplevel->border_tree->node);
+	if (!toplevel->border_rects[0]) {
 		for (int i = 0; i < 4; i++) {
-			wlr_scene_rect_set_color(toplevel->border_rects[i], toplevel->border_color);
+			toplevel->border_rects[i] = wlr_scene_rect_create(
+				toplevel->border_tree, 1, 1, toplevel->border_color);
 		}
-	} else {
-		/* Rounded buffer mode */
-		for (int i = 0; i < 4; i++) {
-			if (toplevel->border_rects[i]) {
-				wlr_scene_node_destroy(&toplevel->border_rects[i]->node);
-				toplevel->border_rects[i] = NULL;
-			}
-		}
-		if (!toplevel->border_buffer) {
-			toplevel->border_buffer = wlr_scene_buffer_create(toplevel->border_tree, NULL);
-			toplevel->border_buffer->point_accepts_input = border_buffer_accepts_input;
-		}
-		wlr_scene_node_raise_to_top(&toplevel->border_tree->node);
-
-		int fw = w + 2 * b;
-		int fh = h + 2 * b;
-		if (fw < 1) fw = 1;
-		if (fh < 1) fh = 1;
-		struct wlr_buffer *buf = create_rounded_border_buffer(
-			fw, fh, toplevel->border_color, b, r);
-		if (buf) {
-			wlr_scene_buffer_set_buffer(toplevel->border_buffer, buf);
-			wlr_scene_node_set_position(&toplevel->border_buffer->node, -b, -b);
-			wlr_buffer_drop(buf);
-		}
+	}
+	wlr_scene_rect_set_size(toplevel->border_rects[0], w + 2 * b, b);
+	wlr_scene_node_set_position(&toplevel->border_rects[0]->node, -b, -b);
+	wlr_scene_rect_set_size(toplevel->border_rects[1], w + 2 * b, b);
+	wlr_scene_node_set_position(&toplevel->border_rects[1]->node, -b, h);
+	wlr_scene_rect_set_size(toplevel->border_rects[2], b, h);
+	wlr_scene_node_set_position(&toplevel->border_rects[2]->node, -b, 0);
+	wlr_scene_rect_set_size(toplevel->border_rects[3], b, h);
+	wlr_scene_node_set_position(&toplevel->border_rects[3]->node, w, 0);
+	wlr_scene_node_lower_to_bottom(&toplevel->border_tree->node);
+	for (int i = 0; i < 4; i++) {
+		wlr_scene_rect_set_color(toplevel->border_rects[i], toplevel->border_color);
 	}
 
 	toplevel->border_w = w;
 	toplevel->border_h = h;
 	toplevel->border_b = b;
-	toplevel->border_r = r;
 }
 
 static int border_anim_cb(void *data) {
@@ -1165,8 +1051,7 @@ static int border_anim_cb(void *data) {
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	uint32_t now = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 	uint32_t elapsed = now - toplevel->border_anim_start;
-	int duration = toplevel->server->border_transition_ms;
-	if (duration <= 0) duration = 1;
+	int duration = 100;
 
 	double t = (double)elapsed / duration;
 	if (t > 1.0) t = 1.0;
@@ -1204,16 +1089,6 @@ static void start_border_animation(struct pudu_toplevel *toplevel, const float t
 }
 
 static void set_border_target(struct pudu_toplevel *toplevel, const float target[4]) {
-	if (toplevel->server->border_transition_ms <= 0) {
-		memcpy(toplevel->border_color, target, sizeof(float) * 4);
-		toplevel_update_border(toplevel);
-		toplevel->border_animating = false;
-		if (toplevel->border_anim_timer) {
-			wl_event_source_remove(toplevel->border_anim_timer);
-			toplevel->border_anim_timer = NULL;
-		}
-		return;
-	}
 	start_border_animation(toplevel, target);
 }
 
@@ -1276,6 +1151,32 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	toplevel->mapped = true;
 	arrange_workspace(toplevel->server, toplevel->workspace);
 	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+
+	/* Center modal/dialog windows on the parent’s output */
+	if (toplevel->floating && toplevel->parent_toplevel) {
+		struct pudu_toplevel *parent = toplevel->parent_toplevel;
+		struct pudu_server *server = toplevel->server;
+		struct wlr_output *wlr_output = wlr_output_layout_output_at(
+			server->output_layout,
+			parent->scene_tree->node.x + parent->allocated.width / 2.0,
+			parent->scene_tree->node.y + parent->allocated.height / 2.0);
+		if (!wlr_output) {
+			wlr_output = wlr_output_layout_get_center_output(server->output_layout);
+		}
+		if (wlr_output) {
+			struct wlr_box area;
+			wlr_output_layout_get_box(server->output_layout, wlr_output, &area);
+			int w = toplevel->xdg_toplevel->base->geometry.width;
+			int h = toplevel->xdg_toplevel->base->geometry.height;
+			if (w < 1) w = 1;
+			if (h < 1) h = 1;
+			int x = area.x + (area.width - w) / 2;
+			int y = area.y + (area.height - h) / 2;
+			wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y);
+			wlr_scene_node_set_position(&toplevel->border_tree->node, 0, 0);
+			wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+		}
+	}
 
 	if (toplevel->workspace != toplevel->server->current_workspace) {
 		wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
@@ -1340,8 +1241,7 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 	int w = geo.width;
 	int h = geo.height;
 	if (toplevel->border_w != w || toplevel->border_h != h ||
-			toplevel->border_b != toplevel->server->active_border_size ||
-			toplevel->border_r != toplevel->server->border_radius) {
+			toplevel->border_b != toplevel->server->active_border_size) {
 		toplevel_update_border(toplevel);
 	}
 }
@@ -1361,7 +1261,6 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&toplevel->unmap.link);
 	wl_list_remove(&toplevel->commit.link);
 	wl_list_remove(&toplevel->destroy.link);
-	wl_list_remove(&toplevel->request_move.link);
 	wl_list_remove(&toplevel->request_maximize.link);
 	wl_list_remove(&toplevel->request_fullscreen.link);
 	wl_list_remove(&toplevel->set_title.link);
@@ -1404,6 +1303,13 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	}
 	if (toplevel->fullscreen) {
 		server_update_layer_visibility(server);
+	}
+	/* Clear parent_toplevel pointers on any child modals */
+	struct pudu_toplevel *child;
+	wl_list_for_each(child, &server->toplevels, link) {
+		if (child->parent_toplevel == toplevel) {
+			child->parent_toplevel = NULL;
+		}
 	}
 	wlr_scene_node_destroy(&toplevel->scene_tree->node);
 	free(toplevel);
@@ -1469,10 +1375,6 @@ void apply_fullscreen_state(struct pudu_toplevel *toplevel, bool fullscreen, str
 
 	wlr_xdg_surface_schedule_configure(xdg->base);
 	server_update_layer_visibility(server);
-}
-
-static void xdg_toplevel_request_move(
-		struct wl_listener *listener, void *data) {
 }
 
 static void xdg_toplevel_request_maximize(
@@ -1599,6 +1501,7 @@ void server_new_toplevel_decoration(struct wl_listener *listener, void *data) {
 	}
 
 	struct pudu_decoration *dec = calloc(1, sizeof(*dec));
+	if (!dec) return;
 	dec->decoration = decoration;
 	dec->toplevel = toplevel;
 
@@ -1613,13 +1516,27 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	struct wlr_xdg_toplevel *xdg_toplevel = data;
 
 	struct pudu_toplevel *toplevel = calloc(1, sizeof(*toplevel));
+	if (!toplevel) return;
 	toplevel->server = server;
 	toplevel->xdg_toplevel = xdg_toplevel;
 	toplevel->workspace = server->current_workspace;
 	wl_list_init(&toplevel->link);
 
+	/* If this toplevel has a parent (e.g., dialog/modal), make it floating */
+	if (xdg_toplevel->parent) {
+		toplevel->floating = true;
+		struct wlr_scene_tree *parent_tree = xdg_toplevel->parent->base->data;
+		if (parent_tree && parent_tree->node.parent) {
+			toplevel->parent_toplevel = parent_tree->node.parent->node.data;
+		}
+	}
+
 	/* Parent tree: positioned/cascade by us, used for hit-testing */
 	toplevel->scene_tree = wlr_scene_tree_create(server->toplevel_tree);
+	if (!toplevel->scene_tree) {
+		free(toplevel);
+		return;
+	}
 	toplevel->scene_tree->node.data = toplevel;
 	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
 
@@ -1633,9 +1550,8 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	}
 	xdg_toplevel->base->data = xdg_tree;
 
-	/* Border tree: holds either rects or a rounded buffer */
+	/* Border tree: holds border rects */
 	toplevel->border_tree = wlr_scene_tree_create(toplevel->scene_tree);
-	toplevel->border_buffer = NULL;
 	for (int i = 0; i < 4; i++) {
 		toplevel->border_rects[i] = NULL;
 	}
@@ -1643,7 +1559,6 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	toplevel->border_w = 0;
 	toplevel->border_h = 0;
 	toplevel->border_b = 0;
-	toplevel->border_r = -1;
 	toplevel->border_animating = false;
 	toplevel->border_anim_timer = NULL;
 
@@ -1656,8 +1571,6 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	toplevel->destroy.notify = xdg_toplevel_destroy;
 	wl_signal_add(&xdg_toplevel->events.destroy, &toplevel->destroy);
 
-	toplevel->request_move.notify = xdg_toplevel_request_move;
-	wl_signal_add(&xdg_toplevel->events.request_move, &toplevel->request_move);
 	toplevel->request_maximize.notify = xdg_toplevel_request_maximize;
 	wl_signal_add(&xdg_toplevel->events.request_maximize, &toplevel->request_maximize);
 	toplevel->request_fullscreen.notify = xdg_toplevel_request_fullscreen;
@@ -1813,20 +1726,9 @@ static void set_tiled(struct pudu_toplevel *t, int x, int y, int w, int h) {
 }
 
 void arrange_workspace(struct pudu_server *server, int workspace) {
-	struct wlr_output *wlr_output = wlr_output_layout_output_at(
-			server->output_layout, server->cursor->x, server->cursor->y);
-	if (!wlr_output) {
-		wlr_output = wlr_output_layout_get_center_output(server->output_layout);
-	}
-	if (!wlr_output) return;
-
-	struct pudu_output *output = output_from_wlr_output(server, wlr_output);
 	struct wlr_box area;
-	if (output) {
-		area = output->usable_area;
-	} else {
-		wlr_output_layout_get_box(server->output_layout, wlr_output, &area);
-	}
+	get_output_area_under_cursor(server, &area);
+	if (area.width <= 0) return;
 
 	int count = 0;
 	struct pudu_toplevel *t;
@@ -1963,6 +1865,38 @@ void swap_master(struct pudu_server *server) {
 	focus_toplevel(focused);
 }
 
+void get_output_area_under_cursor(struct pudu_server *server, struct wlr_box *area) {
+	struct wlr_output *wlr_output = wlr_output_layout_output_at(
+		server->output_layout, server->cursor->x, server->cursor->y);
+	if (!wlr_output) {
+		wlr_output = wlr_output_layout_get_center_output(server->output_layout);
+	}
+	if (wlr_output) {
+		struct pudu_output *output = output_from_wlr_output(server, wlr_output);
+		if (output) {
+			*area = output->usable_area;
+		} else {
+			wlr_output_layout_get_box(server->output_layout, wlr_output, area);
+		}
+	}
+}
+
+void focus_first_toplevel_in_workspace(struct pudu_server *server, int workspace) {
+	struct pudu_toplevel *to_focus = NULL;
+	struct pudu_toplevel *node;
+	wl_list_for_each(node, &server->toplevels, link) {
+		if (node->workspace == workspace) {
+			to_focus = node;
+			break;
+		}
+	}
+	if (to_focus) {
+		focus_toplevel(to_focus);
+	} else {
+		wlr_seat_keyboard_notify_clear_focus(server->seat);
+	}
+}
+
 int workspace_window_count(struct pudu_server *server, int workspace) {
 	struct pudu_toplevel *t;
 	int count = 0;
@@ -1978,20 +1912,21 @@ static void destroy_workspace(struct pudu_server *server, struct pudu_workspace 
 	struct pudu_manager_client *mc, *mc_tmp;
 	wl_list_for_each_safe(mc, mc_tmp, &server->manager_clients, link) {
 		if (!mc->group_resource) continue;
-		struct wl_resource *ws_res, *ws_res_tmp;
-		wl_list_for_each_safe(ws_res, ws_res_tmp, &ws->resources, link) {
-			if (wl_resource_get_client(ws_res) == wl_resource_get_client(mc->manager_resource)) {
+		struct pudu_workspace_resource *wsr, *wsr_tmp;
+		wl_list_for_each_safe(wsr, wsr_tmp, &ws->resources, link) {
+			if (wl_resource_get_client(wsr->resource) == wl_resource_get_client(mc->manager_resource)) {
 				ext_workspace_group_handle_v1_send_workspace_leave(
-					mc->group_resource, ws_res);
+					mc->group_resource, wsr->resource);
 			}
 		}
 	}
 
-	struct wl_resource *ws_res, *res_tmp;
-	wl_list_for_each_safe(ws_res, res_tmp, &ws->resources, link) {
-		wl_resource_set_user_data(ws_res, NULL);
-		ext_workspace_handle_v1_send_removed(ws_res);
-		wl_resource_destroy(ws_res);
+	struct pudu_workspace_resource *wsr, *wsr_tmp;
+	wl_list_for_each_safe(wsr, wsr_tmp, &ws->resources, link) {
+		wl_resource_set_user_data(wsr->resource, NULL);
+		ext_workspace_handle_v1_send_removed(wsr->resource);
+		wl_resource_destroy(wsr->resource);
+		/* el destroy listener libera wsr */
 	}
 
 	wl_list_remove(&ws->link);
@@ -2123,20 +2058,20 @@ void workspace_animation_finish(struct pudu_server *server) {
 	workspace_update_toplevel_visibility(server);
 	server_update_layer_visibility(server);
 	arrange_workspace(server, new_ws);
+	focus_first_toplevel_in_workspace(server, new_ws);
 
-	struct pudu_toplevel *to_focus = NULL;
-	struct pudu_toplevel *node;
-	wl_list_for_each(node, &server->toplevels, link) {
-		if (node->workspace == new_ws) {
-			to_focus = node;
-			break;
-		}
-	}
-	if (to_focus) {
-		focus_toplevel(to_focus);
-	} else {
-		wlr_seat_keyboard_notify_clear_focus(server->seat);
-	}
+	free(server->anim_old_list);
+	free(server->anim_new_list);
+	free(server->anim_old_x);
+	free(server->anim_old_y);
+	free(server->anim_new_x);
+	free(server->anim_new_y);
+	server->anim_old_list = NULL;
+	server->anim_new_list = NULL;
+	server->anim_old_x = NULL;
+	server->anim_old_y = NULL;
+	server->anim_new_x = NULL;
+	server->anim_new_y = NULL;
 
 	server->animating = false;
 }
@@ -2153,18 +2088,18 @@ void view_workspace(struct pudu_server *server, int workspace) {
 	ws = find_workspace(server, old_ws);
 	if (ws) {
 		ws->active = false;
-		struct wl_resource *ws_res;
-		wl_list_for_each(ws_res, &ws->resources, link) {
-			ext_workspace_handle_v1_send_state(ws_res, 0);
+		struct pudu_workspace_resource *wsr;
+		wl_list_for_each(wsr, &ws->resources, link) {
+			ext_workspace_handle_v1_send_state(wsr->resource, 0);
 		}
 	}
 	get_or_create_workspace(server, workspace);
 	ws = find_workspace(server, workspace);
 	if (ws) {
 		ws->active = true;
-		struct wl_resource *ws_res;
-		wl_list_for_each(ws_res, &ws->resources, link) {
-			ext_workspace_handle_v1_send_state(ws_res,
+		struct pudu_workspace_resource *wsr;
+		wl_list_for_each(wsr, &ws->resources, link) {
+			ext_workspace_handle_v1_send_state(wsr->resource,
 				EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE);
 		}
 	}
@@ -2189,13 +2124,48 @@ void view_workspace(struct pudu_server *server, int workspace) {
 		struct pudu_toplevel *t;
 		wl_list_for_each(t, &server->toplevels, link) {
 			if (t->workspace == old_ws && t->mapped) {
-				if (server->anim_old_count < MAX_ANIM_TOPLEVELS) {
-					server->anim_old_list[server->anim_old_count++] = t;
-				}
+				server->anim_old_count++;
 			} else if (t->workspace == workspace && t->mapped) {
-				if (server->anim_new_count < MAX_ANIM_TOPLEVELS) {
-					server->anim_new_list[server->anim_new_count++] = t;
-				}
+				server->anim_new_count++;
+			}
+		}
+	}
+
+	if (server->anim_old_count > 0) {
+		server->anim_old_list = calloc(server->anim_old_count, sizeof(*server->anim_old_list));
+		server->anim_old_x = calloc(server->anim_old_count, sizeof(*server->anim_old_x));
+		server->anim_old_y = calloc(server->anim_old_count, sizeof(*server->anim_old_y));
+	}
+	if (server->anim_new_count > 0) {
+		server->anim_new_list = calloc(server->anim_new_count, sizeof(*server->anim_new_list));
+		server->anim_new_x = calloc(server->anim_new_count, sizeof(*server->anim_new_x));
+		server->anim_new_y = calloc(server->anim_new_count, sizeof(*server->anim_new_y));
+	}
+
+	/* If allocation failed, do instant switch */
+	if ((server->anim_old_count > 0 && (!server->anim_old_list || !server->anim_old_x || !server->anim_old_y)) ||
+	    (server->anim_new_count > 0 && (!server->anim_new_list || !server->anim_new_x || !server->anim_new_y))) {
+		free(server->anim_old_list); server->anim_old_list = NULL;
+		free(server->anim_old_x); server->anim_old_x = NULL;
+		free(server->anim_old_y); server->anim_old_y = NULL;
+		free(server->anim_new_list); server->anim_new_list = NULL;
+		free(server->anim_new_x); server->anim_new_x = NULL;
+		free(server->anim_new_y); server->anim_new_y = NULL;
+		workspace_update_toplevel_visibility(server);
+		server_update_layer_visibility(server);
+		arrange_workspace(server, workspace);
+		focus_first_toplevel_in_workspace(server, workspace);
+		return;
+	}
+
+	{
+		int old_i = 0, new_i = 0;
+		struct pudu_toplevel *t;
+		wl_list_for_each(t, &server->toplevels, link) {
+			if (t->workspace == old_ws && t->mapped) {
+				server->anim_old_list[old_i++] = t;
+			} else if (t->workspace == workspace && t->mapped) {
+				server->anim_new_list[new_i++] = t;
 			}
 		}
 	}
@@ -2209,16 +2179,7 @@ void view_workspace(struct pudu_server *server, int workspace) {
 		workspace_update_toplevel_visibility(server);
 		server_update_layer_visibility(server);
 		arrange_workspace(server, workspace);
-		struct pudu_toplevel *to_focus = NULL;
-		struct pudu_toplevel *node;
-		wl_list_for_each(node, &server->toplevels, link) {
-			if (node->workspace == workspace) {
-				to_focus = node;
-				break;
-			}
-		}
-		if (to_focus) focus_toplevel(to_focus);
-		else wlr_seat_keyboard_notify_clear_focus(server->seat);
+		focus_first_toplevel_in_workspace(server, workspace);
 		return;
 	}
 
@@ -2254,9 +2215,6 @@ void view_workspace(struct pudu_server *server, int workspace) {
 	}
 }
 
-int get_dynamic_workspace_count(struct pudu_server *server) {
-	return server->workspace_count;
-}
 /*
  * ext_workspace_manager_v1 protocol implementation
  */
@@ -2271,51 +2229,38 @@ static void workspace_handle_destroy(struct wl_client *client,
 static void workspace_handle_activate(struct wl_client *client,
 		struct wl_resource *resource) {
 	struct pudu_workspace *ws = wl_resource_get_user_data(resource);
-	if (ws && !ws->active) {
+	if (ws && ws->server && !ws->active) {
 		view_workspace(ws->server, ws->number);
 	}
 }
 
-static void workspace_handle_deactivate(struct wl_client *client,
-		struct wl_resource *resource) {
-}
-
-static void workspace_handle_remove(struct wl_client *client,
-		struct wl_resource *resource) {
-}
-
-static void workspace_handle_assign(struct wl_client *client,
-		struct wl_resource *resource, struct wl_resource *workspace_group) {
-}
-
-void workspace_handle_resource_destroyed(struct wl_resource *resource) {
-	wl_list_remove(&resource->link);
+static void workspace_resource_handle_destroy(struct wl_listener *listener, void *data) {
+	struct pudu_workspace_resource *wsr = wl_container_of(listener, wsr, destroy);
+	wl_list_remove(&wsr->link);
+	free(wsr);
 }
 
 static const struct ext_workspace_handle_v1_interface workspace_handle_impl = {
 	.destroy = workspace_handle_destroy,
 	.activate = workspace_handle_activate,
-	.deactivate = workspace_handle_deactivate,
-	.remove = workspace_handle_remove,
-	.assign = workspace_handle_assign,
 };
 
 /* ext_workspace_group_handle_v1 request handlers */
-
-static void group_handle_create_workspace(struct wl_client *client,
-		struct wl_resource *resource, const char *name) {
-}
 
 static void group_handle_destroy(struct wl_client *client,
 		struct wl_resource *resource) {
 	wl_resource_destroy(resource);
 }
 
+static void group_handle_create_workspace(struct wl_client *client,
+		struct wl_resource *resource, const char *name) {
+	/* No-op — compositor does not advertise create_workspace capability */
+}
+
 void group_handle_resource_destroyed(struct wl_resource *resource) {
 	struct pudu_manager_client *mc = wl_resource_get_user_data(resource);
-	if (mc) {
-		mc->group_resource = NULL;
-	}
+	if (!mc) return;
+	mc->group_resource = NULL;
 }
 
 static const struct ext_workspace_group_handle_v1_interface group_handle_impl = {
@@ -2327,6 +2272,7 @@ static const struct ext_workspace_group_handle_v1_interface group_handle_impl = 
 
 static void manager_handle_commit(struct wl_client *client,
 		struct wl_resource *resource) {
+	/* No-op — changes are applied immediately in this compositor */
 }
 
 static void manager_handle_stop(struct wl_client *client,
@@ -2336,6 +2282,7 @@ static void manager_handle_stop(struct wl_client *client,
 
 void manager_handle_resource_destroyed(struct wl_resource *resource) {
 	struct pudu_manager_client *mc = wl_resource_get_user_data(resource);
+	if (!mc) return;
 	if (mc->group_resource) {
 		wl_resource_destroy(mc->group_resource);
 	}
@@ -2355,6 +2302,39 @@ void workspace_send_done_all(struct pudu_server *server) {
 	}
 }
 
+struct wl_resource *workspace_send_to_client(struct pudu_workspace *ws, struct pudu_manager_client *mc, uint32_t version) {
+	struct wl_client *client = wl_resource_get_client(mc->manager_resource);
+	struct wl_resource *ws_res = wl_resource_create(client,
+		&ext_workspace_handle_v1_interface, version, 0);
+	if (!ws_res) return NULL;
+	wl_resource_set_implementation(ws_res, &workspace_handle_impl,
+		ws, NULL);
+
+	ext_workspace_manager_v1_send_workspace(mc->manager_resource, ws_res);
+
+	char name[16];
+	snprintf(name, sizeof(name), "%d", ws->number);
+	ext_workspace_handle_v1_send_name(ws_res, name);
+	if (ws->active) {
+		ext_workspace_handle_v1_send_state(ws_res,
+			EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE);
+	}
+	ext_workspace_handle_v1_send_capabilities(ws_res,
+		EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE);
+
+	if (mc->group_resource) {
+		ext_workspace_group_handle_v1_send_workspace_enter(
+			mc->group_resource, ws_res);
+	}
+
+	struct pudu_workspace_resource *wsr = calloc(1, sizeof(*wsr));
+	wsr->resource = ws_res;
+	wsr->destroy.notify = workspace_resource_handle_destroy;
+	wl_resource_add_destroy_listener(ws_res, &wsr->destroy);
+	wl_list_insert(&ws->resources, &wsr->link);
+	return ws_res;
+}
+
 struct pudu_workspace *find_workspace(struct pudu_server *server, int number) {
 	struct pudu_workspace *ws;
 	wl_list_for_each(ws, &server->workspaces, link) {
@@ -2365,44 +2345,20 @@ struct pudu_workspace *find_workspace(struct pudu_server *server, int number) {
 
 void create_workspace(struct pudu_server *server, int number) {
 	struct pudu_workspace *ws = calloc(1, sizeof(*ws));
+	if (!ws) return;
 	ws->server = server;
 	ws->number = number;
 	ws->active = (number == server->current_workspace);
 	wl_list_init(&ws->resources);
 	wl_list_insert(server->workspaces.prev, &ws->link);
 
-	char name[16];
-	snprintf(name, sizeof(name), "%d", number);
-
 	struct pudu_manager_client *mc, *mc_tmp;
 	wl_list_for_each_safe(mc, mc_tmp, &server->manager_clients, link) {
-		struct wl_client *client = wl_resource_get_client(mc->manager_resource);
-		struct wl_resource *ws_res = wl_resource_create(client,
-			&ext_workspace_handle_v1_interface,
-			wl_resource_get_version(mc->manager_resource), 0);
-		wl_resource_set_implementation(ws_res, &workspace_handle_impl,
-			ws, workspace_handle_resource_destroyed);
-
-		ext_workspace_manager_v1_send_workspace(mc->manager_resource, ws_res);
-		ext_workspace_handle_v1_send_name(ws_res, name);
-		if (ws->active) {
-			ext_workspace_handle_v1_send_state(ws_res,
-				EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE);
-		}
-		ext_workspace_handle_v1_send_capabilities(ws_res,
-			EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE);
-
-		if (mc->group_resource) {
-			ext_workspace_group_handle_v1_send_workspace_enter(
-				mc->group_resource, ws_res);
-		}
-
-		wl_list_insert(&ws->resources, &ws_res->link);
+		workspace_send_to_client(ws, mc, wl_resource_get_version(mc->manager_resource));
 	}
 
 	if (!wl_list_empty(&server->manager_clients)) {
 		workspace_send_done_all(server);
-		struct pudu_manager_client *mc, *mc_tmp;
 		wl_list_for_each_safe(mc, mc_tmp, &server->manager_clients, link) {
 			wl_client_flush(wl_resource_get_client(mc->manager_resource));
 		}
@@ -2421,9 +2377,14 @@ void workspace_manager_bind(struct wl_client *client, void *data,
 	struct pudu_server *server = data;
 
 	struct pudu_manager_client *mc = calloc(1, sizeof(*mc));
+	if (!mc) return;
 
 	mc->manager_resource = wl_resource_create(
 		client, &ext_workspace_manager_v1_interface, version, id);
+	if (!mc->manager_resource) {
+		free(mc);
+		return;
+	}
 	wl_resource_set_implementation(mc->manager_resource, &manager_impl,
 		mc, manager_handle_resource_destroyed);
 
@@ -2431,6 +2392,10 @@ void workspace_manager_bind(struct wl_client *client, void *data,
 
 	mc->group_resource = wl_resource_create(
 		client, &ext_workspace_group_handle_v1_interface, version, 0);
+	if (!mc->group_resource) {
+		wl_resource_destroy(mc->manager_resource);
+		return;
+	}
 	wl_resource_set_implementation(mc->group_resource, &group_handle_impl, mc, group_handle_resource_destroyed);
 
 	if (mc->group_resource) {
@@ -2452,29 +2417,7 @@ void workspace_manager_bind(struct wl_client *client, void *data,
 
 	struct pudu_workspace *ws;
 	wl_list_for_each(ws, &server->workspaces, link) {
-		struct wl_resource *ws_resource = wl_resource_create(
-			client, &ext_workspace_handle_v1_interface, version, 0);
-		wl_resource_set_implementation(ws_resource, &workspace_handle_impl,
-			ws, workspace_handle_resource_destroyed);
-
-		ext_workspace_manager_v1_send_workspace(mc->manager_resource, ws_resource);
-
-		char name[16];
-		snprintf(name, sizeof(name), "%d", ws->number);
-		ext_workspace_handle_v1_send_name(ws_resource, name);
-		if (ws->active) {
-			ext_workspace_handle_v1_send_state(ws_resource,
-				EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE);
-		}
-		ext_workspace_handle_v1_send_capabilities(ws_resource,
-			EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE);
-
-		if (mc->group_resource) {
-			ext_workspace_group_handle_v1_send_workspace_enter(
-				mc->group_resource, ws_resource);
-		}
-
-		wl_list_insert(&ws->resources, &ws_resource->link);
+		workspace_send_to_client(ws, mc, version);
 	}
 
 	ext_workspace_manager_v1_send_done(mc->manager_resource);
@@ -2502,48 +2445,25 @@ void execute_binding(struct pudu_server *server,
 		swap_master(server);
 		break;
 	}
-	case PUDU_ACTION_WORKSPACE_NEXT: {
-		int next_ws = server->current_workspace + 1;
-		if (next_ws > server->workspace_count) next_ws = 1;
-		view_workspace(server, next_ws);
-		break;
-	}
+	case PUDU_ACTION_WORKSPACE_NEXT:
 	case PUDU_ACTION_WORKSPACE_PREV: {
-		int prev_ws = server->current_workspace - 1;
-		if (prev_ws < 1) prev_ws = server->workspace_count;
-		view_workspace(server, prev_ws);
+		int delta = (b->action == PUDU_ACTION_WORKSPACE_NEXT) ? 1 : -1;
+		int ws = server->current_workspace + delta;
+		if (ws > server->workspace_count) ws = 1;
+		if (ws < 1) ws = server->workspace_count;
+		view_workspace(server, ws);
 		break;
 	}
-	case PUDU_ACTION_MOVE_WORKSPACE_NEXT: {
-		struct pudu_toplevel *toplevel = focused_toplevel(server);
-		if (toplevel) {
-			int old_ws = toplevel->workspace;
-			toplevel->workspace = toplevel->workspace + 1;
-			if (toplevel->workspace > server->workspace_count) toplevel->workspace = 1;
-			/* Re-insert according to new_is_master so layout order is correct */
-			if (!wl_list_empty(&toplevel->link)) {
-				wl_list_remove(&toplevel->link);
-				wl_list_init(&toplevel->link);
-			}
-			if (server->new_is_master) {
-				wl_list_insert(&server->toplevels, &toplevel->link);
-			} else {
-				wl_list_insert(server->toplevels.prev, &toplevel->link);
-			}
-			arrange_workspace(server, old_ws);
-			arrange_workspace(server, toplevel->workspace);
-			view_workspace(server, toplevel->workspace);
-		}
-		break;
-	}
+	case PUDU_ACTION_MOVE_WORKSPACE_NEXT:
 	case PUDU_ACTION_MOVE_WORKSPACE_PREV: {
 		struct pudu_toplevel *toplevel = focused_toplevel(server);
 		if (toplevel) {
 			int old_ws = toplevel->workspace;
-			int prev_ws = toplevel->workspace - 1;
-			if (prev_ws < 1) prev_ws = server->workspace_count;
-			toplevel->workspace = prev_ws;
-			/* Re-insert according to new_is_master so layout order is correct */
+			int delta = (b->action == PUDU_ACTION_MOVE_WORKSPACE_NEXT) ? 1 : -1;
+			int ws = toplevel->workspace + delta;
+			if (ws > server->workspace_count) ws = 1;
+			if (ws < 1) ws = server->workspace_count;
+			toplevel->workspace = ws;
 			if (!wl_list_empty(&toplevel->link)) {
 				wl_list_remove(&toplevel->link);
 				wl_list_init(&toplevel->link);
@@ -2589,68 +2509,32 @@ static char *trim(char *str) {
 }
 
 static xkb_keysym_t keysym_from_name(const char *name) {
-	if (strcmp(name, "Return") == 0) return XKB_KEY_Return;
-	if (strcmp(name, "Escape") == 0) return XKB_KEY_Escape;
-	if (strcmp(name, "Tab") == 0) return XKB_KEY_Tab;
-	if (strcmp(name, "Space") == 0) return XKB_KEY_space;
-	if (strcmp(name, "Left") == 0) return XKB_KEY_Left;
-	if (strcmp(name, "Right") == 0) return XKB_KEY_Right;
-	if (strcmp(name, "Up") == 0) return XKB_KEY_Up;
-	if (strcmp(name, "Down") == 0) return XKB_KEY_Down;
-	if (strlen(name) == 1) {
-		return xkb_keysym_from_name(name, XKB_KEYSYM_NO_FLAGS);
-	}
 	return xkb_keysym_from_name(name, XKB_KEYSYM_NO_FLAGS);
 }
 
 static uint32_t modifier_from_name(const char *name) {
-	if (strcasecmp(name, "Shift") == 0 ||
-	    strcasecmp(name, "Shift_L") == 0 ||
-	    strcasecmp(name, "Shift_R") == 0 ||
-	    strcasecmp(name, "S") == 0) {
-		return WLR_MODIFIER_SHIFT;
-	}
-	if (strcasecmp(name, "Control") == 0 ||
-	    strcasecmp(name, "Control_L") == 0 ||
-	    strcasecmp(name, "Control_R") == 0 ||
-	    strcasecmp(name, "Ctrl") == 0 ||
-	    strcasecmp(name, "Ctrl_L") == 0 ||
-	    strcasecmp(name, "Ctrl_R") == 0 ||
-	    strcasecmp(name, "C") == 0) {
-		return WLR_MODIFIER_CTRL;
-	}
-	if (strcasecmp(name, "Alt") == 0 ||
-	    strcasecmp(name, "Alt_L") == 0 ||
-	    strcasecmp(name, "Alt_R") == 0 ||
-	    strcasecmp(name, "Mod1") == 0 ||
-	    strcasecmp(name, "A") == 0) {
-		return WLR_MODIFIER_ALT;
-	}
-	if (strcasecmp(name, "Super") == 0 ||
-	    strcasecmp(name, "Super_L") == 0 ||
-	    strcasecmp(name, "Super_R") == 0 ||
-	    strcasecmp(name, "Logo") == 0 ||
-	    strcasecmp(name, "Mod4") == 0 ||
-	    strcasecmp(name, "Win") == 0 ||
-	    strcasecmp(name, "Win_L") == 0 ||
-	    strcasecmp(name, "Win_R") == 0 ||
-	    strcasecmp(name, "Command") == 0 ||
-	    strcasecmp(name, "Cmd") == 0 ||
-	    strcasecmp(name, "W") == 0) {
-		return WLR_MODIFIER_LOGO;
-	}
-	if (strcasecmp(name, "Mod2") == 0) {
-		return WLR_MODIFIER_MOD2;
-	}
-	if (strcasecmp(name, "Mod3") == 0) {
-		return WLR_MODIFIER_MOD3;
-	}
-	if (strcasecmp(name, "Mod5") == 0) {
-		return WLR_MODIFIER_MOD5;
-	}
-	if (strcasecmp(name, "Caps_Lock") == 0 ||
-	    strcasecmp(name, "Caps") == 0) {
-		return WLR_MODIFIER_CAPS;
+	static const struct { const char *name; uint32_t mod; } map[] = {
+		{"Shift", WLR_MODIFIER_SHIFT}, {"Shift_L", WLR_MODIFIER_SHIFT},
+		{"Shift_R", WLR_MODIFIER_SHIFT}, {"S", WLR_MODIFIER_SHIFT},
+		{"Control", WLR_MODIFIER_CTRL}, {"Control_L", WLR_MODIFIER_CTRL},
+		{"Control_R", WLR_MODIFIER_CTRL}, {"Ctrl", WLR_MODIFIER_CTRL},
+		{"Ctrl_L", WLR_MODIFIER_CTRL}, {"Ctrl_R", WLR_MODIFIER_CTRL},
+		{"C", WLR_MODIFIER_CTRL},
+		{"Alt", WLR_MODIFIER_ALT}, {"Alt_L", WLR_MODIFIER_ALT},
+		{"Alt_R", WLR_MODIFIER_ALT}, {"Mod1", WLR_MODIFIER_ALT},
+		{"A", WLR_MODIFIER_ALT},
+		{"Super", WLR_MODIFIER_LOGO}, {"Super_L", WLR_MODIFIER_LOGO},
+		{"Super_R", WLR_MODIFIER_LOGO}, {"Logo", WLR_MODIFIER_LOGO},
+		{"Mod4", WLR_MODIFIER_LOGO}, {"Win", WLR_MODIFIER_LOGO},
+		{"Win_L", WLR_MODIFIER_LOGO}, {"Win_R", WLR_MODIFIER_LOGO},
+		{"Command", WLR_MODIFIER_LOGO}, {"Cmd", WLR_MODIFIER_LOGO},
+		{"W", WLR_MODIFIER_LOGO},
+		{"Mod2", WLR_MODIFIER_MOD2}, {"Mod3", WLR_MODIFIER_MOD3},
+		{"Mod5", WLR_MODIFIER_MOD5},
+		{"Caps_Lock", WLR_MODIFIER_CAPS}, {"Caps", WLR_MODIFIER_CAPS},
+	};
+	for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
+		if (strcasecmp(name, map[i].name) == 0) return map[i].mod;
 	}
 	return 0;
 }
@@ -2660,6 +2544,7 @@ static const char *config_get_var(const char *name);
 static uint32_t parse_mods(struct pudu_server *server, const char *str) {
 	uint32_t mods = 0;
 	char *copy = strdup(str);
+	if (!copy) return 0;
 	char *token = strtok(copy, "+");
 	while (token) {
 		char *t = trim(token);
@@ -2694,8 +2579,13 @@ static bool parse_color(const char *str, float color[4]) {
 static void config_add_binding(struct pudu_server *server,
 		const char *spec, const char *action_str_orig) {
 	struct pudu_binding *b = calloc(1, sizeof(*b));
+	if (!b) return;
 
 	char *copy = strdup(spec);
+	if (!copy) {
+		free(b);
+		return;
+	}
 	char *last_plus = strrchr(copy, '+');
 	char *key_name;
 	if (last_plus) {
@@ -2716,33 +2606,43 @@ static void config_add_binding(struct pudu_server *server,
 	}
 
 	char *action_str_copy = strdup(action_str_orig);
-	char *action_str = trim(action_str_copy);
-
-	if (strcmp(action_str, "close") == 0) {
-		b->action = PUDU_ACTION_CLOSE;
-	} else if (strcmp(action_str, "exit") == 0) {
-		b->action = PUDU_ACTION_EXIT;
-	} else if (strcmp(action_str, "cycle_toplevels") == 0) {
-		b->action = PUDU_ACTION_CYCLE_TOPLEVELS;
-	} else if (strcmp(action_str, "swap_master") == 0) {
-		b->action = PUDU_ACTION_SWAP_MASTER;
-	} else if (strcmp(action_str, "workspace_next") == 0) {
-		b->action = PUDU_ACTION_WORKSPACE_NEXT;
-	} else if (strcmp(action_str, "workspace_prev") == 0) {
-		b->action = PUDU_ACTION_WORKSPACE_PREV;
-	} else if (strcmp(action_str, "move_workspace_next") == 0) {
-		b->action = PUDU_ACTION_MOVE_WORKSPACE_NEXT;
-	} else if (strcmp(action_str, "move_workspace_prev") == 0) {
-		b->action = PUDU_ACTION_MOVE_WORKSPACE_PREV;
-	} else if (strncmp(action_str, "exec ", 5) == 0) {
-		b->action = PUDU_ACTION_EXEC;
-		b->command = strdup(trim(action_str + 5));
-	} else {
-		wlr_log(WLR_ERROR, "unknown action: %s", action_str);
-		free(action_str_copy);
+	if (!action_str_copy) {
 		free(copy);
 		free(b);
 		return;
+	}
+	char *action_str = trim(action_str_copy);
+
+	static const struct { const char *name; enum pudu_action action; } action_map[] = {
+		{"close", PUDU_ACTION_CLOSE},
+		{"exit", PUDU_ACTION_EXIT},
+		{"cycle_toplevels", PUDU_ACTION_CYCLE_TOPLEVELS},
+		{"swap_master", PUDU_ACTION_SWAP_MASTER},
+		{"workspace_next", PUDU_ACTION_WORKSPACE_NEXT},
+		{"workspace_prev", PUDU_ACTION_WORKSPACE_PREV},
+		{"move_workspace_next", PUDU_ACTION_MOVE_WORKSPACE_NEXT},
+		{"move_workspace_prev", PUDU_ACTION_MOVE_WORKSPACE_PREV},
+	};
+	bool found = false;
+	for (size_t i = 0; i < sizeof(action_map) / sizeof(action_map[0]); i++) {
+		if (strcmp(action_str, action_map[i].name) == 0) {
+			b->action = action_map[i].action;
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		if (strncmp(action_str, "exec ", 5) == 0) {
+			b->action = PUDU_ACTION_EXEC;
+			char *cmd = strdup(trim(action_str + 5));
+			if (cmd) b->command = cmd;
+		} else {
+			wlr_log(WLR_ERROR, "unknown action: %s", action_str);
+			free(action_str_copy);
+			free(copy);
+			free(b);
+			return;
+		}
 	}
 
 	wl_list_insert(&server->bindings, &b->link);
@@ -2793,9 +2693,16 @@ static const char *config_get_var(const char *name) {
 
 static void config_set_var(const char *name, const char *value) {
 	if (config_var_count >= 32) return;
-	config_vars[config_var_count][0] = strdup(name);
-	config_vars[config_var_count][1] = strdup(value);
-	config_var_count++;
+	char *n = strdup(name);
+	char *v = strdup(value);
+	if (n && v) {
+		config_vars[config_var_count][0] = n;
+		config_vars[config_var_count][1] = v;
+		config_var_count++;
+	} else {
+		free(n);
+		free(v);
+	}
 }
 
 static char *strip_comment(char *line) {
@@ -2854,7 +2761,12 @@ static void config_parse_line(struct pudu_server *server, char *line) {
 		while (*val == ' ' || *val == '\t' || *val == '=') val++;
 		val = trim(val);
 		struct pudu_autostart *as = calloc(1, sizeof(*as));
+		if (!as) return;
 		as->command = strdup(val);
+		if (!as->command) {
+			free(as);
+			return;
+		}
 		wl_list_insert(&server->autostarts, &as->link);
 		return;
 	}
@@ -2934,11 +2846,6 @@ static void config_parse_line(struct pudu_server *server, char *line) {
 		parse_color(value, server->active_border_color);
 	} else if (strcmp(key, "inactive_border_color") == 0) {
 		parse_color(value, server->inactive_border_color);
-	} else if (strcmp(key, "border_transition_ms") == 0) {
-		server->border_transition_ms = atoi(value);
-	} else if (strcmp(key, "border_radius") == 0) {
-		int n = atoi(value);
-		if (n >= 0) server->border_radius = n;
 	} else if (strcmp(key, "new_is_master") == 0) {
 		server->new_is_master = config_parse_bool(value);
 	} else if (strcmp(key, "natural_scroll") == 0) {
@@ -2996,7 +2903,6 @@ void load_config(struct pudu_server *server) {
 	wl_list_for_each(t, &server->toplevels, link) {
 		if (!t->mapped) continue;
 		t->border_w = 0; /* force geometry update on next commit */
-		t->border_r = -1; /* force border mode switch if radius changed */
 		const float *target = (server->focused_toplevel_ptr == t) ?
 			server->active_border_color : server->inactive_border_color;
 		set_border_target(t, target);
@@ -3153,6 +3059,7 @@ void server_new_layer_surface(struct wl_listener *listener, void *data) {
 	}
 
 	struct pudu_layer_surface *surf = calloc(1, sizeof(*surf));
+	if (!surf) return;
 	surf->server = server;
 	surf->scene_layer = wlr_scene_layer_surface_v1_create(
 		layer_tree, layer_surface);

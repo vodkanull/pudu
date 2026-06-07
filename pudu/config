@@ -7,13 +7,11 @@
 $mod = Super_L
 
 ui {
-    inner_gap = 6
-    outer_gap = 6
+    inner_gap = 5
+    outer_gap = 5
     active_border_size = 2
-    active_border_color = #c59b3a
-    inactive_border_color = #1c1c1c
-    border_transition_ms = 100
-    border_radius = 8
+    active_border_color = #285577
+    inactive_border_color = #222222
     new_is_master = false
     workspace_count = 5
 }

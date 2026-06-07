@@ -1,6 +1,5 @@
 #pragma once
 
-#include <assert.h>
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -8,7 +7,6 @@
 #include <string.h>
 #include <sys/inotify.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #include <math.h>
@@ -48,14 +46,12 @@
 #include <wlr/interfaces/wlr_buffer.h>
 #include <xkbcommon/xkbcommon.h>
 #include <drm_fourcc.h>
-#include <cairo.h>
 
 #include <wlr/util/region.h>
 
 #include "ext-workspace-v1-protocol.h"
 
 #define ANIM_FRAMES 14
-#define MAX_ANIM_TOPLEVELS 64
 #define MASTER_RATIO 0.5f
 
 enum pudu_cursor_mode {
@@ -94,7 +90,6 @@ struct pudu_toplevel {
 	struct wl_listener unmap;
 	struct wl_listener commit;
 	struct wl_listener destroy;
-	struct wl_listener request_move;
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
 	struct wlr_foreign_toplevel_handle_v1 *foreign_handle;
@@ -108,11 +103,9 @@ struct pudu_toplevel {
 	struct wlr_xdg_toplevel_decoration_v1 *xdg_decoration;
 	struct wlr_scene_tree *border_tree;
 	struct wlr_scene_rect *border_rects[4];
-	struct wlr_scene_buffer *border_buffer;
 	int border_w;
 	int border_h;
 	int border_b;
-	int border_r;
 	float border_color[4];
 	float border_start[4];
 	float border_target[4];
@@ -123,6 +116,7 @@ struct pudu_toplevel {
 	bool mapped;
 	bool fullscreen;
 	bool floating;
+	struct pudu_toplevel *parent_toplevel;
 	struct wlr_box allocated;
 };
 
@@ -139,6 +133,12 @@ struct pudu_popup {
 struct pudu_autostart {
 	struct wl_list link;
 	char *command;
+};
+
+struct pudu_workspace_resource {
+	struct wl_list link;
+	struct wl_resource *resource;
+	struct wl_listener destroy;
 };
 
 struct pudu_workspace {
@@ -236,8 +236,6 @@ struct pudu_server {
 	int active_border_size;
 	float active_border_color[4];
 	float inactive_border_color[4];
-	int border_transition_ms;
-	int border_radius;
 	int inner_gap;
 	int outer_gap;
 	float master_ratio;
@@ -253,12 +251,12 @@ struct pudu_server {
 	bool animating;
 	int anim_old_count;
 	int anim_new_count;
-	struct pudu_toplevel *anim_old_list[MAX_ANIM_TOPLEVELS];
-	struct pudu_toplevel *anim_new_list[MAX_ANIM_TOPLEVELS];
-	double anim_old_x[MAX_ANIM_TOPLEVELS];
-	double anim_old_y[MAX_ANIM_TOPLEVELS];
-	double anim_new_x[MAX_ANIM_TOPLEVELS];
-	double anim_new_y[MAX_ANIM_TOPLEVELS];
+	struct pudu_toplevel **anim_old_list;
+	struct pudu_toplevel **anim_new_list;
+	double *anim_old_x;
+	double *anim_old_y;
+	double *anim_new_x;
+	double *anim_new_y;
 	uint32_t anim_start_time;
 	double anim_slide_dist;
 	int anim_new_workspace;
@@ -328,6 +326,8 @@ void toplevel_set_fullscreen(struct pudu_toplevel *toplevel, bool fullscreen);
 void arrange_workspace(struct pudu_server *server, int workspace);
 void cycle_focus(struct pudu_server *server);
 void swap_master(struct pudu_server *server);
+void get_output_area_under_cursor(struct pudu_server *server, struct wlr_box *area);
+void focus_first_toplevel_in_workspace(struct pudu_server *server, int workspace);
 
 /* Layer shell */
 void server_new_layer_surface(struct wl_listener *listener, void *data);
@@ -345,7 +345,6 @@ void session_lock_handle_destroy(struct wl_listener *listener, void *data);
 
 /* Workspace */
 void view_workspace(struct pudu_server *server, int workspace);
-int get_dynamic_workspace_count(struct pudu_server *server);
 int workspace_window_count(struct pudu_server *server, int workspace);
 void sync_dynamic_workspaces(struct pudu_server *server);
 void server_new_pointer_constraint(struct wl_listener *listener, void *data);
@@ -357,6 +356,7 @@ void create_workspace(struct pudu_server *server, int number);
 struct pudu_workspace *get_or_create_workspace(struct pudu_server *server, int number);
 void workspace_send_done_all(struct pudu_server *server);
 void workspace_manager_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id);
+struct wl_resource *workspace_send_to_client(struct pudu_workspace *ws, struct pudu_manager_client *mc, uint32_t version);
 
 /* XDG Activation */
 void handle_xdg_activation_request_activate(struct wl_listener *listener, void *data);
