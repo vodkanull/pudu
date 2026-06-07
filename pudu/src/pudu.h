@@ -118,6 +118,13 @@ struct pudu_toplevel {
 	bool floating;
 	struct pudu_toplevel *parent_toplevel;
 	struct wlr_box allocated;
+
+	/* Position animation (jelly / back-out) */
+	double anim_start_x, anim_start_y;
+	double anim_target_x, anim_target_y;
+	uint32_t anim_start_time;
+	bool pos_animating;
+	struct wl_event_source *pos_anim_timer;
 };
 
 struct pudu_popup {

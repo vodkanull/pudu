@@ -1137,6 +1137,67 @@ struct pudu_toplevel *focused_toplevel(struct pudu_server *server) {
 	return server->focused_toplevel_ptr;
 }
 
+#define POS_ANIM_DURATION_MS 280
+
+static double ease_out_back(double t) {
+	const double c1 = 1.70158;
+	const double c3 = c1 + 1;
+	return 1.0 + c3 * pow(t - 1.0, 3.0) + c1 * pow(t - 1.0, 2.0);
+}
+
+static int toplevel_pos_anim_cb(void *data) {
+	struct pudu_toplevel *t = data;
+	if (!t->pos_animating) return 0;
+
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	uint32_t now = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+	uint32_t elapsed = now - t->anim_start_time;
+
+	double progress = (double)elapsed / POS_ANIM_DURATION_MS;
+	if (progress > 1.0) progress = 1.0;
+	double eased = ease_out_back(progress);
+
+	double x = t->anim_start_x + (t->anim_target_x - t->anim_start_x) * eased;
+	double y = t->anim_start_y + (t->anim_target_y - t->anim_start_y) * eased;
+	wlr_scene_node_set_position(&t->scene_tree->node, x, y);
+
+	if (progress >= 1.0) {
+		t->pos_animating = false;
+		return 0;
+	}
+
+	wl_event_source_timer_update(t->pos_anim_timer, 16);
+	return 0;
+}
+
+static void toplevel_animate_to(struct pudu_toplevel *t, double target_x, double target_y) {
+	double current_x = t->scene_tree->node.x;
+	double current_y = t->scene_tree->node.y;
+
+	if (fabs(current_x - target_x) < 0.5 && fabs(current_y - target_y) < 0.5) {
+		wlr_scene_node_set_position(&t->scene_tree->node, target_x, target_y);
+		t->pos_animating = false;
+		return;
+	}
+
+	t->anim_start_x = current_x;
+	t->anim_start_y = current_y;
+	t->anim_target_x = target_x;
+	t->anim_target_y = target_y;
+
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	t->anim_start_time = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+	t->pos_animating = true;
+
+	if (!t->pos_anim_timer) {
+		struct wl_event_loop *loop = wl_display_get_event_loop(t->server->wl_display);
+		t->pos_anim_timer = wl_event_loop_add_timer(loop, toplevel_pos_anim_cb, t);
+	}
+	wl_event_source_timer_update(t->pos_anim_timer, 16);
+}
+
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	struct pudu_toplevel *toplevel = wl_container_of(listener, toplevel, map);
 	wlr_log(WLR_DEBUG, "map: title='%s' app_id='%s'",
@@ -1172,9 +1233,10 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 			if (h < 1) h = 1;
 			int x = area.x + (area.width - w) / 2;
 			int y = area.y + (area.height - h) / 2;
-			wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y);
+			wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y + 30);
 			wlr_scene_node_set_position(&toplevel->border_tree->node, 0, 0);
 			wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+			toplevel_animate_to(toplevel, x, y);
 		}
 	}
 
@@ -1255,6 +1317,10 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	if (toplevel->border_anim_timer) {
 		wl_event_source_remove(toplevel->border_anim_timer);
 		toplevel->border_anim_timer = NULL;
+	}
+	if (toplevel->pos_anim_timer) {
+		wl_event_source_remove(toplevel->pos_anim_timer);
+		toplevel->pos_anim_timer = NULL;
 	}
 	toplevel_destroy_border(toplevel);
 	wl_list_remove(&toplevel->map.link);
@@ -1707,7 +1773,7 @@ static void set_tiled(struct pudu_toplevel *t, int x, int y, int w, int h) {
 	if (cw < 1) cw = 1;
 	if (ch < 1) ch = 1;
 
-	wlr_scene_node_set_position(&t->scene_tree->node, x, y);
+	toplevel_animate_to(t, x, y);
 
 	struct wlr_scene_tree *xdg_tree = t->xdg_toplevel->base->data;
 	if (xdg_tree) {
