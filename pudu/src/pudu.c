@@ -2934,6 +2934,10 @@ void load_config(struct pudu_server *server) {
 	snprintf(config_path, sizeof(config_path), "%s/.config/pudu/config", home);
 	FILE *f = fopen(config_path, "r");
 	if (!f) {
+		char config_parent[512];
+		snprintf(config_parent, sizeof(config_parent), "%s/.config", home);
+		mkdir(config_parent, 0755);
+
 		char config_dir[512];
 		snprintf(config_dir, sizeof(config_dir), "%s/.config/pudu", home);
 		mkdir(config_dir, 0755);
