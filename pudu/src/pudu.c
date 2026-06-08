@@ -617,6 +617,13 @@ void server_new_pointer_constraint(struct wl_listener *listener, void *data) {
 	update_active_pointer_constraint(server, server->seat->pointer_state.focused_surface);
 }
 
+static void server_schedule_frames(struct pudu_server *server) {
+	struct pudu_output *output;
+	wl_list_for_each(output, &server->outputs, link) {
+		wlr_output_schedule_frame(output->wlr_output);
+	}
+}
+
 static void process_cursor_motion(struct pudu_server *server, uint32_t time) {
 	wlr_idle_notifier_v1_notify_activity(server->idle_notifier, server->seat);
 
@@ -626,6 +633,7 @@ static void process_cursor_motion(struct pudu_server *server, uint32_t time) {
 			double new_x = server->cursor->x - server->grab_x;
 			double new_y = server->cursor->y - server->grab_y;
 			wlr_scene_node_set_position(&t->scene_tree->node, new_x, new_y);
+			server_schedule_frames(server);
 		}
 		return;
 	}
@@ -644,6 +652,7 @@ static void process_cursor_motion(struct pudu_server *server, uint32_t time) {
 			if (ratio > 0.9f) ratio = 0.9f;
 			server->master_ratio = ratio;
 			arrange_workspace(server, server->current_workspace);
+			server_schedule_frames(server);
 		}
 		return;
 	}
@@ -765,6 +774,7 @@ static void finish_move(struct pudu_server *server) {
 	}
 
 	arrange_workspace(server, ws);
+	server_schedule_frames(server);
 }
 
 void server_cursor_button(struct wl_listener *listener, void *data) {
@@ -1062,6 +1072,7 @@ static int border_anim_cb(void *data) {
 			toplevel->border_color[i] = start + (target - start) * t;
 	}
 	toplevel_update_border(toplevel);
+	server_schedule_frames(toplevel->server);
 
 	if (t >= 1.0) {
 		toplevel->border_animating = false;
@@ -1161,6 +1172,7 @@ static int toplevel_pos_anim_cb(void *data) {
 	double x = t->anim_start_x + (t->anim_target_x - t->anim_start_x) * eased;
 	double y = t->anim_start_y + (t->anim_target_y - t->anim_start_y) * eased;
 	wlr_scene_node_set_position(&t->scene_tree->node, x, y);
+	server_schedule_frames(t->server);
 
 	if (progress >= 1.0) {
 		t->pos_animating = false;
@@ -1255,6 +1267,7 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	} else {
 		focus_toplevel(toplevel);
 	}
+	server_schedule_frames(toplevel->server);
 }
 
 static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -1272,6 +1285,7 @@ static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 	if (ws == toplevel->server->current_workspace) {
 		arrange_workspace(toplevel->server, ws);
 	}
+	server_schedule_frames(toplevel->server);
 }
 
 
@@ -1441,6 +1455,7 @@ void apply_fullscreen_state(struct pudu_toplevel *toplevel, bool fullscreen, str
 
 	wlr_xdg_surface_schedule_configure(xdg->base);
 	server_update_layer_visibility(server);
+	server_schedule_frames(server);
 }
 
 static void xdg_toplevel_request_maximize(
@@ -1454,6 +1469,7 @@ static void xdg_toplevel_request_maximize(
 		if (!xdg->requested.maximized) {
 			arrange_workspace(toplevel->server, toplevel->workspace);
 		}
+		server_schedule_frames(toplevel->server);
 	}
 }
 
@@ -1686,6 +1702,7 @@ static void popup_position(struct pudu_popup *popup) {
 	}
 	wlr_xdg_popup_unconstrain_from_box(xdg_popup, &box);
 	wlr_scene_node_set_position(&tree->node, xdg_popup->current.geometry.x, xdg_popup->current.geometry.y);
+	server_schedule_frames(popup->server);
 }
 
 static void popup_handle_map(struct wl_listener *listener, void *data) {
@@ -1929,6 +1946,7 @@ void swap_master(struct pudu_server *server) {
 
 	arrange_workspace(server, ws);
 	focus_toplevel(focused);
+	server_schedule_frames(server);
 }
 
 void get_output_area_under_cursor(struct pudu_server *server, struct wlr_box *area) {
@@ -2060,6 +2078,7 @@ void workspace_update_toplevel_visibility(struct pudu_server *server) {
 		bool visible = (t->workspace == server->current_workspace);
 		wlr_scene_node_set_enabled(&t->scene_tree->node, visible);
 	}
+	server_schedule_frames(server);
 }
 
 #define ANIM_DURATION_MS 220
@@ -2125,6 +2144,7 @@ void workspace_animation_finish(struct pudu_server *server) {
 	server_update_layer_visibility(server);
 	arrange_workspace(server, new_ws);
 	focus_first_toplevel_in_workspace(server, new_ws);
+	server_schedule_frames(server);
 
 	free(server->anim_old_list);
 	free(server->anim_new_list);
@@ -2221,6 +2241,7 @@ void view_workspace(struct pudu_server *server, int workspace) {
 		server_update_layer_visibility(server);
 		arrange_workspace(server, workspace);
 		focus_first_toplevel_in_workspace(server, workspace);
+		server_schedule_frames(server);
 		return;
 	}
 
@@ -2246,6 +2267,7 @@ void view_workspace(struct pudu_server *server, int workspace) {
 		server_update_layer_visibility(server);
 		arrange_workspace(server, workspace);
 		focus_first_toplevel_in_workspace(server, workspace);
+		server_schedule_frames(server);
 		return;
 	}
 
@@ -3174,6 +3196,7 @@ void session_lock_handle_unlock(struct wl_listener *listener, void *data) {
 	struct pudu_server *server = wl_container_of(listener, server, session_lock_unlock);
 	wlr_scene_node_set_enabled(&server->lock_tree->node, false);
 	server->cur_lock = NULL;
+	server_schedule_frames(server);
 }
 
 void session_lock_handle_destroy(struct wl_listener *listener, void *data) {
@@ -3182,6 +3205,7 @@ void session_lock_handle_destroy(struct wl_listener *listener, void *data) {
 		wlr_scene_node_set_enabled(&server->lock_tree->node, false);
 		server->cur_lock = NULL;
 	}
+	server_schedule_frames(server);
 }
 
 void server_new_session_lock(struct wl_listener *listener, void *data) {
@@ -3203,6 +3227,7 @@ void server_new_session_lock(struct wl_listener *listener, void *data) {
 	wlr_session_lock_v1_send_locked(lock);
 	wlr_scene_node_set_enabled(&server->lock_tree->node, true);
 	wlr_scene_node_raise_to_top(&server->lock_tree->node);
+	server_schedule_frames(server);
 }
 
 /* Config hot-reload via inotify */
@@ -3236,6 +3261,7 @@ int config_watch_cb(int fd, uint32_t mask, void *data) {
 		wlr_log(WLR_INFO, "Config file changed, reloading...");
 		load_config(server);
 		arrange_workspace(server, server->current_workspace);
+		server_schedule_frames(server);
 	}
 	return 0;
 }
