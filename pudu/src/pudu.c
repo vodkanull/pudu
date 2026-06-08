@@ -774,6 +774,7 @@ static void finish_move(struct pudu_server *server) {
 	}
 
 	arrange_workspace(server, ws);
+	focus_under_cursor(server);
 	server_schedule_frames(server);
 }
 
@@ -1148,6 +1149,22 @@ struct pudu_toplevel *focused_toplevel(struct pudu_server *server) {
 	return server->focused_toplevel_ptr;
 }
 
+void focus_under_cursor(struct pudu_server *server) {
+	if (server->cursor_mode != PUDU_CURSOR_PASSTHROUGH) {
+		return;
+	}
+
+	double sx, sy;
+	struct wlr_surface *surface = NULL;
+	struct pudu_toplevel *toplevel = desktop_toplevel_at(server,
+			server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+
+	if (toplevel && toplevel != server->focused_toplevel_ptr &&
+			toplevel->workspace == server->current_workspace && toplevel->mapped) {
+		focus_toplevel(toplevel);
+	}
+}
+
 #define POS_ANIM_DURATION_MS 280
 
 static double ease_out_back(double t) {
@@ -1265,7 +1282,10 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 		if (cur) focus_toplevel(cur);
 		else wlr_seat_keyboard_notify_clear_focus(toplevel->server->seat);
 	} else {
-		focus_toplevel(toplevel);
+		focus_under_cursor(toplevel->server);
+		if (!toplevel->server->focused_toplevel_ptr) {
+			focus_toplevel(toplevel);
+		}
 	}
 	server_schedule_frames(toplevel->server);
 }
@@ -1283,7 +1303,11 @@ static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 	}
 	workspace_update_toplevel_visibility(toplevel->server);
 	if (ws == toplevel->server->current_workspace) {
+		if (toplevel->server->focused_toplevel_ptr == toplevel) {
+			toplevel->server->focused_toplevel_ptr = NULL;
+		}
 		arrange_workspace(toplevel->server, ws);
+		focus_under_cursor(toplevel->server);
 	}
 	server_schedule_frames(toplevel->server);
 }
@@ -1381,6 +1405,7 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	if (server->focused_toplevel_ptr == toplevel) {
 		server->focused_toplevel_ptr = NULL;
 	}
+	focus_under_cursor(server);
 	if (toplevel->fullscreen) {
 		server_update_layer_visibility(server);
 	}

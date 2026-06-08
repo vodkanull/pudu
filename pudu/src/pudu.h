@@ -327,6 +327,7 @@ void server_new_xdg_popup(struct wl_listener *listener, void *data);
 void server_new_toplevel_decoration(struct wl_listener *listener, void *data);
 void focus_toplevel(struct pudu_toplevel *toplevel);
 struct pudu_toplevel *focused_toplevel(struct pudu_server *server);
+void focus_under_cursor(struct pudu_server *server);
 void toplevel_set_fullscreen(struct pudu_toplevel *toplevel, bool fullscreen);
 
 /* Layout */
