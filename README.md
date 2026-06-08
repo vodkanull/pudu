@@ -1,6 +1,6 @@
-<!--<div align="center">
+<div align="center">
   <img src="media/pudu.png" alt="Logo" width="140"/>
-</div>-->
+</div>
 
 > [!NOTE]
 > 🦌 **pudu** is a minimal tiling Wayland Compositor built on top of wlroots.
