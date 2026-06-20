@@ -1,0 +1,34 @@
+PUDU_MOD Super
+
+autostart {
+    # swaybg -i ~/wallpaper.jpg fill
+    # waybar
+    # mako
+}
+
+ui {
+    inner_gap           5
+    outer_gap           5
+    border_size         2
+    border_radius       6
+    border_active       #005dcf
+    border_inactive     #1c1c1c
+    border_transition   100
+    new_is_master       false
+    workspace_count     5
+}
+
+input {
+    natural_scroll      true
+}
+
+binds {
+    Super+C              PUDU_CLOSE
+    Super+Escape         PUDU_EXIT
+    Super+Return         kitty
+
+    Super+Left           PUDU_WORKSPACE_PREV
+    Super+Right          PUDU_WORKSPACE_NEXT
+    Super+Shift+Left     PUDU_WORKSPACE_MOVE_PREV
+    Super+Shift+Right    PUDU_WORKSPACE_MOVE_NEXT
+}

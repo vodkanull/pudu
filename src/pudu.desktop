@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=Pudu
+Comment=Minimal tiling Wayland compositor
+Exec=/usr/local/bin/pudu
+Type=Application

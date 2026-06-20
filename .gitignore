@@ -1,0 +1,6 @@
+src/protocols/generated/*
+src/build/
+*.swp
+*.swo
+*~
+.DS_Store
