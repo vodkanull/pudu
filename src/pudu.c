@@ -1,6 +1,9 @@
 #include "pudu.h"
 #include <signal.h>
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 void handle_xdg_activation_request_activate(
 		struct wl_listener *listener, void *data) {
 	struct pudu_server *server =
@@ -671,7 +674,7 @@ static void finish_move(struct pudu_server *server) {
 
 	if (!t) return;
 
-	t->floating = false;
+	if (!t->dialog) t->floating = false;
 
 	struct wlr_output *wlr_output = wlr_output_layout_output_at(
 		server->output_layout, server->cursor->x, server->cursor->y);
@@ -1277,11 +1280,61 @@ struct pudu_toplevel *focused_toplevel(struct pudu_server *server) {
 	return server->focused_toplevel_ptr;
 }
 
+static void center_toplevel(struct pudu_toplevel *toplevel) {
+	struct pudu_server *server = toplevel->server;
+	struct wlr_box geo = toplevel->xdg_toplevel->base->geometry;
+	int w = geo.width;
+	int h = geo.height;
+	if (w < 1) w = 400;
+	if (h < 1) h = 300;
+
+	int cx, cy;
+	struct wlr_xdg_toplevel *parent = toplevel->xdg_toplevel->parent;
+	if (parent) {
+		struct wlr_scene_tree *parent_xdg_tree = parent->base->data;
+		if (parent_xdg_tree && parent_xdg_tree->node.parent) {
+			struct pudu_toplevel *parent_tl = parent_xdg_tree->node.parent->node.data;
+			if (parent_tl && parent_tl->mapped) {
+				double px = parent_tl->scene_tree->node.x;
+				double py = parent_tl->scene_tree->node.y;
+				struct wlr_box pgeo = parent->base->geometry;
+				cx = px + pgeo.width / 2;
+				cy = py + pgeo.height / 2;
+				wlr_scene_node_set_position(&toplevel->scene_tree->node, cx - w / 2, cy - h / 2);
+				return;
+			}
+		}
+	}
+
+	struct wlr_output *wlr_output = wlr_output_layout_output_at(
+		server->output_layout, server->cursor->x, server->cursor->y);
+	if (!wlr_output) {
+		wlr_output = wlr_output_layout_get_center_output(server->output_layout);
+	}
+	if (wlr_output) {
+		struct pudu_output *output = output_from_wlr_output(server, wlr_output);
+		struct wlr_box area;
+		if (output) {
+			area = output->usable_area;
+		} else {
+			wlr_output_layout_get_box(server->output_layout, wlr_output, &area);
+		}
+		cx = area.x + area.width / 2;
+		cy = area.y + area.height / 2;
+		wlr_scene_node_set_position(&toplevel->scene_tree->node, cx - w / 2, cy - h / 2);
+	}
+}
+
 void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	struct pudu_toplevel *toplevel = wl_container_of(listener, toplevel, map);
 	wlr_log(WLR_DEBUG, "map: title='%s' app_id='%s'",
 		toplevel->xdg_toplevel->title ? toplevel->xdg_toplevel->title : "",
 		toplevel->xdg_toplevel->app_id ? toplevel->xdg_toplevel->app_id : "");
+
+	if (toplevel->dialog) {
+		toplevel->floating = true;
+		wlr_xdg_toplevel_set_tiled(toplevel->xdg_toplevel, WLR_EDGE_NONE);
+	}
 
 	if (toplevel->server->new_is_master) {
 		wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
@@ -1290,6 +1343,9 @@ void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	}
 	toplevel->mapped = true;
 	arrange_workspace(toplevel->server, toplevel->workspace);
+	if (toplevel->dialog) {
+		center_toplevel(toplevel);
+	}
 	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
 
 	if (toplevel->workspace != toplevel->server->current_workspace) {
@@ -1323,6 +1379,18 @@ void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 	workspace_update_toplevel_visibility(toplevel->server);
 	if (ws == toplevel->server->current_workspace) {
 		arrange_workspace(toplevel->server, ws);
+	}
+	if (toplevel->dialog && ws == toplevel->server->current_workspace) {
+		struct wlr_xdg_toplevel *parent = toplevel->xdg_toplevel->parent;
+		if (parent) {
+			struct wlr_scene_tree *parent_xdg_tree = parent->base->data;
+			if (parent_xdg_tree && parent_xdg_tree->node.parent) {
+				struct pudu_toplevel *parent_tl = parent_xdg_tree->node.parent->node.data;
+				if (parent_tl && parent_tl->mapped && parent_tl->workspace == ws) {
+					focus_toplevel(parent_tl);
+				}
+			}
+		}
 	}
 }
 
@@ -1632,6 +1700,7 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	toplevel->server = server;
 	toplevel->xdg_toplevel = xdg_toplevel;
 	toplevel->workspace = server->current_workspace;
+	toplevel->dialog = (xdg_toplevel->parent != NULL);
 	wl_list_init(&toplevel->link);
 
 	/* Parent tree: positioned/cascade by us, used for hit-testing */
@@ -1862,6 +1931,12 @@ static void set_tiled(struct pudu_toplevel *t, int x, int y, int w, int h) {
 	wlr_xdg_surface_schedule_configure(t->xdg_toplevel->base);
 }
 
+static bool win_has_min(struct pudu_toplevel *t, int *min_w, int *min_h) {
+	*min_w = t->xdg_toplevel->current.min_width;
+	*min_h = t->xdg_toplevel->current.min_height;
+	return *min_w > 0 || *min_h > 0;
+}
+
 void arrange_workspace(struct pudu_server *server, int workspace) {
 	struct wlr_output *wlr_output = wlr_output_layout_output_at(
 			server->output_layout, server->cursor->x, server->cursor->y);
@@ -1891,53 +1966,133 @@ void arrange_workspace(struct pudu_server *server, int workspace) {
 	int ig = server->inner_gap;
 	int og = server->outer_gap;
 
-	int master_fw = 0, stack_fw = 0, master_ch = 0;
-	int frame_h = 0;
-	int N = count - 1;
-
 	if (count == 1) {
-		master_ch = area.height - 2 * og;
-		if (master_ch < 1) master_ch = 1;
-	} else {
-		int frames_w = area.width - 2 * og - ig;
-		if (frames_w < 1) frames_w = 1;
-		master_fw = (int)(frames_w * server->master_ratio);
-		stack_fw = frames_w - master_fw;
-		master_ch = area.height - 2 * og;
-		if (master_ch < 1) master_ch = 1;
-		frame_h = (area.height - 2 * og - (N - 1) * ig) / N;
-		if (frame_h < 1) frame_h = 1;
+		wl_list_for_each(t, &server->toplevels, link) {
+			if (t->workspace != workspace || !t->mapped || t->fullscreen || t->floating) continue;
+			int fx = MAX(1, area.x + og);
+			int fy = MAX(1, area.y + og);
+			int fw = MAX(1, area.width - 2 * og);
+			int fh = MAX(1, area.height - 2 * og);
+			int mw, mh;
+			if (win_has_min(t, &mw, &mh)) {
+				if (mw > 0 && fw < mw) fw = mw;
+				if (mh > 0 && fh < mh) fh = mh;
+			}
+			int mxw = t->xdg_toplevel->current.max_width;
+			int mxh = t->xdg_toplevel->current.max_height;
+			if (mxw > 0 && fw > mxw) fw = mxw;
+			if (mxh > 0 && fh > mxh) fh = mxh;
+			set_tiled(t, fx, fy, fw, fh);
+			return;
+		}
 	}
 
-	int i = 0;
+	int frames_w = MAX(1, area.width - 2 * og - ig);
+	float master_ratio = server->master_ratio;
+	int master_fw = MAX(1, (int)(frames_w * master_ratio));
+	int stack_fw = MAX(1, frames_w - master_fw);
+
+	struct pudu_toplevel *master = NULL;
+	struct pudu_toplevel *stack_wins[64];
+	int n_stack = 0;
 	wl_list_for_each(t, &server->toplevels, link) {
 		if (t->workspace != workspace || !t->mapped || t->fullscreen || t->floating) continue;
+		if (!master) { master = t; continue; }
+		stack_wins[n_stack++] = t;
+	}
 
-		if (count == 1) {
-			int fx = area.x + og;
-			int fy = area.y + og;
-			int fw = area.width - 2 * og;
-			int fh = area.height - 2 * og;
-			set_tiled(t, fx, fy, fw, fh);
-		} else if (i == 0) {
-			set_tiled(t,
-				area.x + og,
-				area.y + og,
-				master_fw,
-				master_ch);
+	int master_min_w = master->xdg_toplevel->current.min_width;
+	int stack_min_w = 0;
+	bool floated = false;
+	for (int i = 0; i < n_stack; i++) {
+		int mw = stack_wins[i]->xdg_toplevel->current.min_width;
+		if (mw > stack_min_w) stack_min_w = mw;
+	}
+
+	if (stack_min_w > 0 && stack_fw < stack_min_w) {
+		stack_fw = MIN(stack_min_w, frames_w - 1);
+		master_fw = MAX(1, frames_w - stack_fw);
+	}
+	if (master_min_w > 0 && master_fw < master_min_w) {
+		master_fw = MIN(master_min_w, frames_w - 1);
+		stack_fw = MAX(1, frames_w - master_fw);
+	}
+	if ((master_min_w > 0 && master_fw < master_min_w) ||
+		(stack_min_w > 0 && stack_fw < stack_min_w)) {
+		if (master_min_w > 0 && master_fw < master_min_w) {
+			master->floating = true;
+			floated = true;
+			wlr_xdg_toplevel_set_tiled(master->xdg_toplevel, WLR_EDGE_NONE);
+			center_toplevel(master);
 		} else {
-			int frame_y = area.y + og + (i - 1) * (frame_h + ig);
-			int h = frame_h;
-			if (i == count - 1) {
-				h = area.y + area.height - og - frame_y;
+			for (int i = 0; i < n_stack; i++) {
+				if (stack_wins[i]->xdg_toplevel->current.min_width > stack_fw) {
+					stack_wins[i]->floating = true;
+					floated = true;
+					wlr_xdg_toplevel_set_tiled(stack_wins[i]->xdg_toplevel, WLR_EDGE_NONE);
+					center_toplevel(stack_wins[i]);
+				}
 			}
-			set_tiled(t,
-				area.x + og + master_fw + ig,
-				frame_y,
-				stack_fw,
-				h);
 		}
-		i++;
+		if (floated) { arrange_workspace(server, workspace); return; }
+	}
+
+	int available_h = MAX(1, area.height - 2 * og);
+	int master_ch = available_h;
+
+	int stack_heights[64];
+	int total_min_h = 0;
+	bool stack_has_min = false;
+	for (int i = 0; i < n_stack; i++) {
+		int mh = stack_wins[i]->xdg_toplevel->current.min_height;
+		if (mh > 0) { total_min_h += mh; stack_has_min = true; }
+		stack_heights[i] = 0;
+	}
+
+	if (stack_has_min) {
+		int min_space = total_min_h + MAX(0, n_stack - 1) * ig;
+		if (min_space <= available_h) {
+			int extra = available_h - min_space;
+			int base_extra = extra / n_stack;
+			int rem = extra - base_extra * n_stack;
+			for (int i = 0; i < n_stack; i++) {
+				int mh = stack_wins[i]->xdg_toplevel->current.min_height;
+				stack_heights[i] = MAX(1, mh + base_extra);
+				if (rem > 0) { stack_heights[i]++; rem--; }
+			}
+		} else {
+			floated = false;
+			for (int i = 0; i < n_stack; i++) {
+				int mh = stack_wins[i]->xdg_toplevel->current.min_height;
+				if (mh > available_h / n_stack) {
+					stack_wins[i]->floating = true;
+					floated = true;
+					wlr_xdg_toplevel_set_tiled(stack_wins[i]->xdg_toplevel, WLR_EDGE_NONE);
+					center_toplevel(stack_wins[i]);
+				}
+			}
+			if (floated) { arrange_workspace(server, workspace); return; }
+			int frame_h = MAX(1, (available_h - (n_stack - 1) * ig) / n_stack);
+			for (int i = 0; i < n_stack; i++) stack_heights[i] = frame_h;
+		}
+	} else {
+		int frame_h = MAX(1, (available_h - (n_stack - 1) * ig) / n_stack);
+		for (int i = 0; i < n_stack; i++) stack_heights[i] = frame_h;
+	}
+
+	set_tiled(master, area.x + og, area.y + og, master_fw, master_ch);
+
+	int fy = area.y + og;
+	for (int i = 0; i < n_stack; i++) {
+		int h = stack_heights[i] > 0 ? stack_heights[i]
+			: MAX(1, (available_h - (n_stack - 1) * ig) / n_stack);
+		if (i == n_stack - 1) {
+			h = MAX(1, area.y + area.height - og - fy);
+		}
+		set_tiled(stack_wins[i],
+			area.x + og + master_fw + ig,
+			fy, stack_fw, h);
+		fy += h + ig;
 	}
 }
 

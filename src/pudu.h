@@ -123,6 +123,7 @@ struct pudu_toplevel {
 	bool mapped;
 	bool fullscreen;
 	bool floating;
+	bool dialog;
 	struct wlr_box allocated;
 	/* Arrange animation (jelly snap) */
 	double arrange_from_x, arrange_from_y;
