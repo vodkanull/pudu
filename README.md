@@ -68,5 +68,7 @@ pudu
 > If you find a bug, have a suggestion, or just want to share your thoughts, feel free to **open an issue**.
 > Pull requests are **not accepted** (this is a personal hobby project).
 
+<video src="https://github.com/user-attachments/assets/c6b639f0-cfee-4a8a-bd6e-3c1cb852b7e8" autoplay loop muted playsinline width="100%"></video>
+
 ## License
 🦌 Pudu is made in 🇨🇱 and is under the GPL v3.0 license.
