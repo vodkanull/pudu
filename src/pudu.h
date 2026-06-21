@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/inotify.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -75,6 +74,7 @@ enum pudu_action {
 	NULLWC_ACTION_MOVE_WORKSPACE_NEXT,
 	NULLWC_ACTION_MOVE_WORKSPACE_PREV,
 	NULLWC_ACTION_EXIT,
+	NULLWC_ACTION_RELOAD,
 };
 
 struct pudu_binding {
@@ -100,6 +100,7 @@ struct pudu_toplevel {
 	struct wlr_foreign_toplevel_handle_v1 *foreign_handle;
 	struct wl_listener set_title;
 	struct wl_listener set_app_id;
+	struct wl_listener set_parent;
 	struct wl_listener ft_handle_request_maximize;
 	struct wl_listener ft_handle_request_fullscreen;
 	struct wl_listener ft_handle_request_activate;
@@ -142,6 +143,7 @@ struct pudu_popup {
 struct pudu_autostart {
 	struct wl_list link;
 	char *command;
+	pid_t pid;
 };
 
 struct pudu_workspace {
@@ -296,9 +298,6 @@ struct pudu_server {
 	struct wl_list manager_clients;
 	struct wl_global *workspace_manager_global;
 
-	/* Config hot-reload */
-	int config_watch_fd;
-	struct wl_event_source *config_watch_source;
 };
 
 struct pudu_output {
@@ -375,5 +374,4 @@ bool handle_keybinding(struct pudu_server *server, xkb_keysym_t sym, uint32_t mo
 void execute_binding(struct pudu_server *server, struct pudu_binding *b);
 int workspace_animation_tick(struct pudu_server *server);
 void workspace_animation_finish(struct pudu_server *server);
-void setup_config_watcher(struct pudu_server *server);
-void cleanup_config_watcher(struct pudu_server *server);
+

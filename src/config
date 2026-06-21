@@ -1,7 +1,7 @@
 PUDU_MOD Super
 
 autostart {
-    # swaybg -i ~/wallpaper.jpg fill
+    # swaybg -i ~/wallpaper.jpg -m fill
     # waybar
     # mako
 }
@@ -23,9 +23,11 @@ input {
 }
 
 binds {
+    Super+Return         kitty
+
+    Super+r              PUDU_RELOAD
     Super+C              PUDU_CLOSE
     Super+Escape         PUDU_EXIT
-    Super+Return         kitty
 
     Super+Left           PUDU_WORKSPACE_PREV
     Super+Right          PUDU_WORKSPACE_NEXT

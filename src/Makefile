@@ -24,7 +24,13 @@ $(BUILD)/pudu: $(OBJS) $(PROTOCOLS) $(PROTO_OBJ)
 	@mkdir -p $(BUILD)
 	$(CC) -o $@ $(OBJS) $(PROTO_OBJ) $(CFLAGS) $(LIBS)
 
-$(BUILD)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/pudu.h $(PROTOCOLS)
+$(BUILD)/default_config.inc: $(SRC_DIR)/config
+	@mkdir -p $(BUILD)
+	printf 'static const char default_config[] =\n' > $@
+	sed 's/$$/\\n/' $< | sed 's/.*/"&"/' >> $@
+	printf ';\n' >> $@
+
+$(BUILD)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/pudu.h $(BUILD)/default_config.inc $(PROTOCOLS)
 	@mkdir -p $(BUILD)
 	$(CC) -c -o $@ $< $(CFLAGS)
 

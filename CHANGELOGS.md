@@ -1,25 +1,39 @@
 # Changelogs
 
+## v0.1.2
+
+| |
+|---|
+| Dialogs always on top of their parent window |
+| Dialogs re-center and re-raise when the parent changes dynamically |
+| Removed hot-reload on config change |
+| Added PUDU_RELOAD action to reload config and restart autostarts |
+| Autostart programs now keep their PID, killed on reload |
+
 ## v0.1.1
 
-- Dialog and modal windows (with a parent) now float centered over their parent
-- Floating windows keep their floating state after being moved
-- Focus restores to parent when a dialog closes
-- Window minimum sizes (min-width/min-height) are respected in the tiling layout
-- Windows that cannot fit their minimums in the layout auto-float
+| |
+|---|
+| Modal windows and dialogs (with parent) now float centered over their parent |
+| Floating windows maintain their floating state after being moved |
+| Focus returns to the parent when a dialog is closed |
+| Minimum sizes (min-width/min-height) are respected in tiling layout |
+| Windows that don't fit with their minimums auto-float |
 
 ## v0.1.0
 
-- Master-stack layout with automatically arranged windows
-- Tiling windows with mouse move and resize
-- Multiple workspaces with animated transitions
-- Jelly snap animation when arranging tiled windows
-- Animated border colors on focus change
-- Configurable keybindings
-- Panel and bar support (layer-shell, e.g. waybar)
-- Autostart programs on startup
-- Session lock support
-- Display manager integration
-- Config file hot-reload
-- Configurable natural scrolling
-- Multiple Wayland protocols
+| |
+|---|
+| Master-stack layout with automatically organized windows |
+| Tiling windows can be moved and resized with the mouse |
+| Multiple workspaces with animated transitions |
+| "Jelly snap" animation when organizing windows in tiling |
+| Animated border colors on focus change |
+| Configurable keyboard shortcuts |
+| Support for panels and bars (layer-shell, e.g. waybar) |
+| Autostart programs on startup |
+| Session lock support |
+| Display manager integration |
+| Hot-reload configuration |
+| Configurable natural scrolling |
+| Multiple Wayland protocols |

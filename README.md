@@ -54,6 +54,7 @@ pudu
 > [!TIP]
 > - Move window: **Super** + **Left click** + drag
 > - Close window: **Super** + **C**
+> - Reload config: **Super** + **R** (kills autostarts, reloads config, re-runs autostarts)
 > - Open terminal: **Super** + **Enter** (default: kitty, change it in the config file)
 >
 > The configuration file is located at **`~/.config/pudu/config`**.

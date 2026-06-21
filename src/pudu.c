@@ -33,7 +33,7 @@ static void close_all_fds(void) {
 	}
 }
 
-static void spawn(const char *cmd) {
+static pid_t spawn(const char *cmd) {
 	pid_t pid = fork();
 	if (pid == 0) {
 		setsid();
@@ -41,6 +41,7 @@ static void spawn(const char *cmd) {
 		execl("/bin/sh", "/bin/sh", "-c", cmd, (void *)NULL);
 		_exit(1);
 	}
+	return pid;
 }
 
 static double ease_out_back(double t);
@@ -239,17 +240,13 @@ int main(int argc, char *argv[]) {
 	spawn("sleep 1 && /usr/lib/xdg-desktop-portal-wlr 2>/dev/null || xdg-desktop-portal-wlr");
 
 	load_config(&server);
-	setup_config_watcher(&server);
 
 	struct wl_event_loop *loop = wl_display_get_event_loop(server.wl_display);
 	server.arrange_timer = wl_event_loop_add_timer(loop, arrange_anim_cb, &server);
 
-	struct pudu_autostart *as, *as_tmp;
-	wl_list_for_each_safe(as, as_tmp, &server.autostarts, link) {
-		spawn(as->command);
-		free(as->command);
-		wl_list_remove(&as->link);
-		free(as);
+	struct pudu_autostart *as;
+	wl_list_for_each(as, &server.autostarts, link) {
+		as->pid = spawn(as->command);
 	}
 
 	sync_dynamic_workspaces(&server);
@@ -267,7 +264,6 @@ int main(int argc, char *argv[]) {
 	wlr_log(WLR_INFO, "Running pudu on WAYLAND_DISPLAY=%s", socket);
 	wl_display_run(server.wl_display);
 
-	cleanup_config_watcher(&server);
 	wl_display_destroy_clients(server.wl_display);
 
 	wl_list_remove(&server.new_xdg_toplevel.link);
@@ -1269,6 +1265,15 @@ void focus_toplevel(struct pudu_toplevel *toplevel) {
 		wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_handle, true);
 	}
 
+	/* Raise child dialogs so they always stay above their parent */
+	struct pudu_toplevel *child;
+	wl_list_for_each(child, &server->toplevels, link) {
+		if (child->dialog && child->mapped &&
+				child->xdg_toplevel->parent == toplevel->xdg_toplevel) {
+			wlr_scene_node_raise_to_top(&child->scene_tree->node);
+		}
+	}
+
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
 	if (keyboard != NULL) {
 		wlr_seat_keyboard_notify_enter(seat, surface,
@@ -1288,6 +1293,7 @@ static void center_toplevel(struct pudu_toplevel *toplevel) {
 	if (w < 1) w = 400;
 	if (h < 1) h = 300;
 
+	int b = server->active_border_size;
 	int cx, cy;
 	struct wlr_xdg_toplevel *parent = toplevel->xdg_toplevel->parent;
 	if (parent) {
@@ -1300,7 +1306,18 @@ static void center_toplevel(struct pudu_toplevel *toplevel) {
 				struct wlr_box pgeo = parent->base->geometry;
 				cx = px + pgeo.width / 2;
 				cy = py + pgeo.height / 2;
-				wlr_scene_node_set_position(&toplevel->scene_tree->node, cx - w / 2, cy - h / 2);
+				int fx = cx - w / 2;
+				int fy = cy - h / 2;
+				wlr_scene_node_set_position(&toplevel->scene_tree->node, fx, fy);
+				struct wlr_scene_tree *xdg_tree = toplevel->xdg_toplevel->base->data;
+				if (xdg_tree) {
+					wlr_scene_node_set_position(&xdg_tree->node, b, b);
+				}
+				wlr_scene_node_set_position(&toplevel->border_tree->node, b, b);
+				toplevel->allocated.x = fx;
+				toplevel->allocated.y = fy;
+				toplevel->allocated.width = w + 2 * b;
+				toplevel->allocated.height = h + 2 * b;
 				return;
 			}
 		}
@@ -1321,7 +1338,18 @@ static void center_toplevel(struct pudu_toplevel *toplevel) {
 		}
 		cx = area.x + area.width / 2;
 		cy = area.y + area.height / 2;
-		wlr_scene_node_set_position(&toplevel->scene_tree->node, cx - w / 2, cy - h / 2);
+		int fx = cx - w / 2;
+		int fy = cy - h / 2;
+		wlr_scene_node_set_position(&toplevel->scene_tree->node, fx, fy);
+		struct wlr_scene_tree *xdg_tree = toplevel->xdg_toplevel->base->data;
+		if (xdg_tree) {
+			wlr_scene_node_set_position(&xdg_tree->node, b, b);
+		}
+		wlr_scene_node_set_position(&toplevel->border_tree->node, b, b);
+		toplevel->allocated.x = fx;
+		toplevel->allocated.y = fy;
+		toplevel->allocated.width = w + 2 * b;
+		toplevel->allocated.height = h + 2 * b;
 	}
 }
 
@@ -1331,7 +1359,8 @@ void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 		toplevel->xdg_toplevel->title ? toplevel->xdg_toplevel->title : "",
 		toplevel->xdg_toplevel->app_id ? toplevel->xdg_toplevel->app_id : "");
 
-	if (toplevel->dialog) {
+	if (toplevel->xdg_toplevel->parent != NULL) {
+		toplevel->dialog = true;
 		toplevel->floating = true;
 		wlr_xdg_toplevel_set_tiled(toplevel->xdg_toplevel, WLR_EDGE_NONE);
 	}
@@ -1450,6 +1479,7 @@ void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&toplevel->request_fullscreen.link);
 	wl_list_remove(&toplevel->set_title.link);
 	wl_list_remove(&toplevel->set_app_id.link);
+	wl_list_remove(&toplevel->set_parent.link);
 	/* toplevel->link is removed in unmap; if destroy fires without unmap
 	 * (e.g. client crash) we must remove it here to avoid use-after-free */
 	if (!wl_list_empty(&toplevel->link)) {
@@ -1653,6 +1683,23 @@ void xdg_toplevel_set_app_id(struct wl_listener *listener, void *data) {
 	}
 }
 
+void xdg_toplevel_set_parent(struct wl_listener *listener, void *data) {
+	struct pudu_toplevel *toplevel = wl_container_of(listener, toplevel, set_parent);
+	struct wlr_xdg_toplevel *xdg = toplevel->xdg_toplevel;
+	bool had_parent = toplevel->dialog;
+	toplevel->dialog = (xdg->parent != NULL);
+	if (toplevel->dialog && toplevel->mapped) {
+		toplevel->floating = true;
+		wlr_xdg_toplevel_set_tiled(xdg, WLR_EDGE_NONE);
+		center_toplevel(toplevel);
+		focus_toplevel(toplevel);
+		arrange_workspace(toplevel->server, toplevel->workspace);
+	} else if (!toplevel->dialog && had_parent && toplevel->mapped) {
+		toplevel->floating = false;
+		arrange_workspace(toplevel->server, toplevel->workspace);
+	}
+}
+
 void decoration_handle_destroy(struct wl_listener *listener, void *data) {
 	struct pudu_decoration *dec = wl_container_of(listener, dec, destroy);
 	if (dec->toplevel) {
@@ -1767,11 +1814,13 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 		wl_signal_add(&ft->events.destroy, &toplevel->ft_handle_destroy);
 	}
 
-	/* Update foreign handle when title or app_id changes */
+	/* Update foreign handle when title, app_id or parent changes */
 	toplevel->set_title.notify = xdg_toplevel_set_title;
 	wl_signal_add(&xdg_toplevel->events.set_title, &toplevel->set_title);
 	toplevel->set_app_id.notify = xdg_toplevel_set_app_id;
 	wl_signal_add(&xdg_toplevel->events.set_app_id, &toplevel->set_app_id);
+	toplevel->set_parent.notify = xdg_toplevel_set_parent;
+	wl_signal_add(&xdg_toplevel->events.set_parent, &toplevel->set_parent);
 }
 
 void xdg_popup_commit(struct wl_listener *listener, void *data) {
@@ -2758,6 +2807,16 @@ void execute_binding(struct pudu_server *server,
 	case NULLWC_ACTION_EXIT:
 		wl_display_terminate(server->wl_display);
 		break;
+	case NULLWC_ACTION_RELOAD: {
+		wlr_log(WLR_INFO, "Reloading config...");
+		load_config(server);
+		struct pudu_autostart *as;
+		wl_list_for_each(as, &server->autostarts, link) {
+			as->pid = spawn(as->command);
+		}
+		arrange_workspace(server, server->current_workspace);
+		break;
+	}
 	default:
 		break;
 	}
@@ -2903,6 +2962,7 @@ static void config_add_old_binding(struct pudu_server *server,
 	else if (strcmp(action_str, "PUDU_WORKSPACE_PREV") == 0) b->action = NULLWC_ACTION_WORKSPACE_PREV;
 	else if (strcmp(action_str, "PUDU_WORKSPACE_MOVE_NEXT") == 0) b->action = NULLWC_ACTION_MOVE_WORKSPACE_NEXT;
 	else if (strcmp(action_str, "PUDU_WORKSPACE_MOVE_PREV") == 0) b->action = NULLWC_ACTION_MOVE_WORKSPACE_PREV;
+	else if (strcmp(action_str, "PUDU_RELOAD") == 0) b->action = NULLWC_ACTION_RELOAD;
 	else {
 		b->action = NULLWC_ACTION_EXEC;
 		b->command = strdup(action_str);
@@ -2938,47 +2998,16 @@ void clear_bindings(struct pudu_server *server) {
 void clear_autostarts(struct pudu_server *server) {
 	struct pudu_autostart *as, *tmp;
 	wl_list_for_each_safe(as, tmp, &server->autostarts, link) {
+		if (as->pid > 0) {
+			kill(as->pid, SIGTERM);
+		}
 		wl_list_remove(&as->link);
 		free(as->command);
 		free(as);
 	}
 }
 
-static const char default_config[] =
-"PUDU_MOD Super\n"
-"\n"
-"autostart {\n"
-"    # swaybg -i ~/wallpaper.jpg fill\n"
-"    # waybar\n"
-"    # mako\n"
-"}\n"
-"\n"
-"ui {\n"
-"    inner_gap           5\n"
-"    outer_gap           5\n"
-"    border_size         2\n"
-"    border_radius       6\n"
-"    border_active       #005dcf\n"
-"    border_inactive     #1c1c1c\n"
-"    border_transition   100\n"
-"    new_is_master       false\n"
-"    workspace_count     5\n"
-"}\n"
-"\n"
-"input {\n"
-"    natural_scroll      true\n"
-"}\n"
-"\n"
-"binds {\n"
-"    Super+C              PUDU_CLOSE\n"
-"    Super+Escape         PUDU_EXIT\n"
-"    Super+Return         kitty\n"
-"\n"
-"    Super+Left           PUDU_WORKSPACE_PREV\n"
-"    Super+Right          PUDU_WORKSPACE_NEXT\n"
-"    Super+Shift+Left     PUDU_WORKSPACE_MOVE_PREV\n"
-"    Super+Shift+Right    PUDU_WORKSPACE_MOVE_NEXT\n"
-"}\n";
+#include "build/default_config.inc"
 
 static char *strip_comment(char *line) {
 	for (char *p = line; *p; p++) {
@@ -3359,73 +3388,4 @@ void server_new_session_lock(struct wl_listener *listener, void *data) {
 	wlr_session_lock_v1_send_locked(lock);
 	wlr_scene_node_set_enabled(&server->lock_tree->node, true);
 	wlr_scene_node_raise_to_top(&server->lock_tree->node);
-}
-
-/* Config hot-reload via inotify */
-int config_watch_cb(int fd, uint32_t mask, void *data) {
-	struct pudu_server *server = data;
-	char buf[4096];
-	ssize_t len = read(fd, buf, sizeof(buf));
-	if (len <= 0) return 0;
-
-	bool should_reload = false;
-	for (char *ptr = buf; ptr < buf + len; ) {
-		struct inotify_event *event = (struct inotify_event *)ptr;
-		if (event->len > 0 && strcmp(event->name, "config") == 0) {
-			if (event->mask & (IN_MODIFY | IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE)) {
-				should_reload = true;
-			}
-		}
-		ptr += sizeof(struct inotify_event) + event->len;
-	}
-
-	if (should_reload) {
-		wlr_log(WLR_INFO, "Config file changed, reloading...");
-		load_config(server);
-		arrange_workspace(server, server->current_workspace);
-	}
-	return 0;
-}
-
-void setup_config_watcher(struct pudu_server *server) {
-	server->config_watch_fd = -1;
-	server->config_watch_source = NULL;
-
-	const char *home = getenv("HOME");
-	if (!home) return;
-
-	char config_dir[512];
-	snprintf(config_dir, sizeof(config_dir), "%s/.config/pudu", home);
-
-	server->config_watch_fd = inotify_init1(IN_CLOEXEC | IN_NONBLOCK);
-	if (server->config_watch_fd < 0) {
-		wlr_log(WLR_ERROR, "Failed to create inotify instance");
-		return;
-	}
-
-	int wd = inotify_add_watch(server->config_watch_fd, config_dir,
-		IN_MODIFY | IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE);
-	if (wd < 0) {
-		wlr_log(WLR_ERROR, "Failed to add inotify watch for config directory");
-		close(server->config_watch_fd);
-		server->config_watch_fd = -1;
-		return;
-	}
-
-	struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
-	server->config_watch_source = wl_event_loop_add_fd(loop, server->config_watch_fd,
-		WL_EVENT_READABLE, config_watch_cb, server);
-
-	wlr_log(WLR_INFO, "Config hot-reload watcher started");
-}
-
-void cleanup_config_watcher(struct pudu_server *server) {
-	if (server->config_watch_source) {
-		wl_event_source_remove(server->config_watch_source);
-		server->config_watch_source = NULL;
-	}
-	if (server->config_watch_fd >= 0) {
-		close(server->config_watch_fd);
-		server->config_watch_fd = -1;
-	}
 }
