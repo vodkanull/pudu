@@ -63,7 +63,11 @@ $(PROTO_OBJ): $(GEN_DIR)/ext-workspace-v1-protocol.c
 	@mkdir -p $(BUILD)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
+install:
+	install -Dm755 $(BUILD)/pudu /usr/local/bin/pudu
+	install -Dm644 $(SRC_DIR)/pudu.desktop /usr/share/wayland-sessions/pudu.desktop
+
 clean:
 	rm -rf $(BUILD) $(GEN_DIR)
 
-.PHONY: clean
+.PHONY: clean install

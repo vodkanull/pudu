@@ -19,35 +19,23 @@
 
 > [!IMPORTANT]  
 > Only tested on **Arch Linux**. Other distributions may work but are untested.  
-  
-```bash  
-# Dependencies  
-sudo pacman -S base-devel git wlroots0.19 wayland libxkbcommon libinput cairo kitty seatd  
-```  
-```bash  
-# Build  
-git clone https://github.com/vodkanull/pudu.git  
-cd pudu/src  
-make  
+
+### AUR (recommended)
+
+With an **AUR helper** (`yay`):
+
+```bash
+yay -S pudu-git
 ```
-```bash  
-# Install
-sudo cp build/pudu /usr/local/bin/  
-sudo mkdir -p /usr/share/wayland-sessions/
-sudo cp pudu.desktop /usr/share/wayland-sessions/ 
-```  
-```bash  
-# Seatd (required when running from tty)
-sudo systemctl enable --now seatd
-sudo usermod -aG input,seat $USER
-```  
-> [!IMPORTANT]  
-> After adding the groups, **log out and back in** for the changes to take effect.   
-```bash  
-# Run
-# Select pudu in your DM or run it from tty with:
-pudu
-```  
+
+<!--
+### Build from source
+```bash
+git clone https://aur.archlinux.org/pudu-git.git
+cd pudu-git
+makepkg -si
+```
+-->
 
 ## Configuration
 
