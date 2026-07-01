@@ -1,6 +1,7 @@
 #pragma once
 
 #include <assert.h>
+#include <math.h>
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -52,6 +53,9 @@
 #include <wlr/util/region.h>
 
 #include "ext-workspace-v1-protocol.h"
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #define ANIM_FRAMES 14
 #define MAX_ANIM_TOPLEVELS 64
@@ -110,6 +114,7 @@ struct pudu_toplevel {
 	struct wlr_scene_tree *border_tree;
 	struct wlr_scene_rect *border_rects[4];
 	struct wlr_scene_buffer *border_buffer;
+	struct wlr_scene_buffer *blur_bg;
 	int border_w;
 	int border_h;
 	int border_b;
@@ -204,7 +209,6 @@ struct pudu_server {
 	struct wlr_scene_tree *top_tree;
 	struct wlr_scene_tree *overlay_tree;
 	struct wlr_scene_tree *lock_tree;
-
 	struct wlr_xdg_shell *xdg_shell;
 	struct wl_listener new_xdg_toplevel;
 	struct wl_listener new_xdg_popup;
@@ -249,6 +253,9 @@ struct pudu_server {
 	int arrange_anim_ms;
 	bool arrange_anim;
 	bool natural_scroll;
+	bool blur;
+	float blur_opacity;
+	int blur_strength;
 	bool new_is_master;
 	uint32_t mod_modifier;
 	int workspace_count;
@@ -355,6 +362,7 @@ void view_workspace(struct pudu_server *server, int workspace);
 int get_dynamic_workspace_count(struct pudu_server *server);
 int workspace_window_count(struct pudu_server *server, int workspace);
 void sync_dynamic_workspaces(struct pudu_server *server);
+void server_new_keyboard(struct pudu_server *server, struct wlr_input_device *device);
 void server_new_pointer_constraint(struct wl_listener *listener, void *data);
 void update_active_pointer_constraint(struct pudu_server *server, struct wlr_surface *surface);
 void update_workspace_ipc(struct pudu_server *server);
@@ -374,4 +382,7 @@ bool handle_keybinding(struct pudu_server *server, xkb_keysym_t sym, uint32_t mo
 void execute_binding(struct pudu_server *server, struct pudu_binding *b);
 int workspace_animation_tick(struct pudu_server *server);
 void workspace_animation_finish(struct pudu_server *server);
+int arrange_anim_cb(void *data);
+void set_border_target(struct pudu_toplevel *toplevel, const float target[4]);
+void center_toplevel(struct pudu_toplevel *toplevel);
 

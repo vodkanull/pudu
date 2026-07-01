@@ -7,13 +7,15 @@ autostart {
 }
 
 ui {
-    inner_gap           5
-    outer_gap           5
+    inner_gap           8
+    outer_gap           8
     border_size         2
-    border_radius       6
-    border_active       #005dcf
-    border_inactive     #1c1c1c
+    border_radius       8
+    border_active       #c574dd
+    border_inactive     #c574dd
     border_transition   100
+    blur                false
+    blur_strength       6
     new_is_master       false
     workspace_count     5
 }

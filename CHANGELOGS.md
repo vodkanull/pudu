@@ -1,5 +1,12 @@
 # Changelogs
 
+## v0.1.3
+
+| |
+|---|
+| Kawase blur background behind windows (configurable via `blur`, `blur_strength`) |
+| Fix flatpak apps not being able to open the system browser for OAuth/login |
+
 ## v0.1.2
 
 | |

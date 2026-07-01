@@ -1,6 +1,6 @@
 CC = cc
 CFLAGS = -DWLR_USE_UNSTABLE -I. -Iprotocols/generated $(shell pkg-config --cflags wlroots-0.19 wayland-server libinput cairo)
-LIBS = $(shell pkg-config --libs wlroots-0.19 wayland-server xkbcommon libinput cairo)
+LIBS = $(shell pkg-config --libs wlroots-0.19 wayland-server xkbcommon libinput cairo) -lpixman-1
 
 BUILD = build
 SRC_DIR = .
@@ -14,9 +14,20 @@ PROTOCOLS = $(GEN_DIR)/xdg-shell-protocol.h \
             $(GEN_DIR)/ext-session-lock-v1-protocol.h \
             $(GEN_DIR)/ext-workspace-v1-protocol.h
 
-SRCS = $(SRC_DIR)/pudu.c
+SRCS = $(SRC_DIR)/main.c \
+       $(SRC_DIR)/keyboard.c \
+       $(SRC_DIR)/cursor.c \
+       $(SRC_DIR)/toplevel.c \
+       $(SRC_DIR)/layout.c \
+       $(SRC_DIR)/workspace.c \
+       $(SRC_DIR)/output.c \
+       $(SRC_DIR)/layer_shell.c \
+       $(SRC_DIR)/session_lock.c \
+       $(SRC_DIR)/pudu_config.c \
+       $(SRC_DIR)/bindings.c \
+       $(SRC_DIR)/popup.c
 
-OBJS = $(BUILD)/pudu.o
+OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD)/%.o,$(SRCS))
 
 PROTO_OBJ = $(BUILD)/ext-workspace-v1-protocol.o
 
