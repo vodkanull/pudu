@@ -164,7 +164,17 @@ static void process_cursor_motion(struct pudu_server *server, uint32_t time) {
 		focus_toplevel(toplevel);
 	}
 
-	if (surface) {
+	if (server->drag_icon) {
+		double lx = server->cursor->x - server->seat->drag->icon->surface->current.dx;
+		double ly = server->cursor->y - server->seat->drag->icon->surface->current.dy;
+		wlr_scene_node_set_position(&server->drag_icon->node, lx, ly);
+	}
+
+	if (seat->drag) {
+		if (surface) {
+			wlr_seat_pointer_notify_motion(seat, time, sx, sy);
+		}
+	} else if (surface) {
 		wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
 		wlr_seat_pointer_notify_motion(seat, time, sx, sy);
 	} else {
@@ -448,4 +458,51 @@ void seat_request_set_selection(struct wl_listener *listener, void *data) {
 			listener, server, request_set_selection);
 	struct wlr_seat_request_set_selection_event *event = data;
 	wlr_seat_set_selection(server->seat, event->source, event->serial);
+}
+
+void seat_request_start_drag(struct wl_listener *listener, void *data) {
+	struct pudu_server *server = wl_container_of(
+			listener, server, request_start_drag);
+	struct wlr_seat_request_start_drag_event *event = data;
+	wlr_seat_start_pointer_drag(server->seat, event->drag, event->serial);
+}
+
+static void drag_icon_handle_commit(struct wl_listener *listener, void *data) {
+	struct pudu_server *server = wl_container_of(
+			listener, server, drag_icon_commit);
+	if (!server->drag_icon) {
+		return;
+	}
+	double lx = server->cursor->x - server->seat->drag->icon->surface->current.dx;
+	double ly = server->cursor->y - server->seat->drag->icon->surface->current.dy;
+	wlr_scene_node_set_position(&server->drag_icon->node, lx, ly);
+}
+
+void seat_start_drag(struct wl_listener *listener, void *data) {
+	struct pudu_server *server = wl_container_of(
+			listener, server, start_drag);
+	struct wlr_drag *drag = data;
+
+	server->destroy_drag.notify = seat_destroy_drag;
+	wl_signal_add(&drag->events.destroy, &server->destroy_drag);
+
+	if (drag->icon) {
+		server->drag_icon = wlr_scene_drag_icon_create(
+				server->overlay_tree, drag->icon);
+		server->drag_icon_commit.notify = drag_icon_handle_commit;
+		wl_signal_add(&drag->icon->surface->events.commit,
+				&server->drag_icon_commit);
+		drag_icon_handle_commit(&server->drag_icon_commit, NULL);
+	}
+}
+
+void seat_destroy_drag(struct wl_listener *listener, void *data) {
+	struct pudu_server *server = wl_container_of(
+			listener, server, destroy_drag);
+	if (server->drag_icon) {
+		wl_list_remove(&server->drag_icon_commit.link);
+		wlr_scene_node_destroy(&server->drag_icon->node);
+		server->drag_icon = NULL;
+	}
+	wl_list_remove(&server->destroy_drag.link);
 }

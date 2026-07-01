@@ -12,7 +12,7 @@ ui {
     border_size         2
     border_radius       8
     border_active       #c574dd
-    border_inactive     #c574dd
+    border_inactive     #3e304c
     border_transition   100
     blur                false
     blur_strength       6

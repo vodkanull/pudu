@@ -297,6 +297,12 @@ struct pudu_server {
 
 	struct wlr_idle_notifier_v1 *idle_notifier;
 
+	struct wlr_scene_tree *drag_icon;
+	struct wl_listener request_start_drag;
+	struct wl_listener start_drag;
+	struct wl_listener destroy_drag;
+	struct wl_listener drag_icon_commit;
+
 	struct wlr_output_layout *output_layout;
 	struct wl_list outputs;
 	struct wl_listener new_output;
@@ -375,6 +381,11 @@ void workspace_manager_bind(struct wl_client *client, void *data, uint32_t versi
 
 /* XDG Activation */
 void handle_xdg_activation_request_activate(struct wl_listener *listener, void *data);
+
+/* Drag and drop */
+void seat_request_start_drag(struct wl_listener *listener, void *data);
+void seat_start_drag(struct wl_listener *listener, void *data);
+void seat_destroy_drag(struct wl_listener *listener, void *data);
 
 /* Config */
 void load_config(struct pudu_server *server);

@@ -247,6 +247,13 @@ int main(int argc, char *argv[]) {
 	wl_signal_add(&server.seat->events.request_set_selection,
 			&server.request_set_selection);
 
+	server.request_start_drag.notify = seat_request_start_drag;
+	wl_signal_add(&server.seat->events.request_start_drag,
+			&server.request_start_drag);
+	server.start_drag.notify = seat_start_drag;
+	wl_signal_add(&server.seat->events.start_drag,
+			&server.start_drag);
+
 	const char *socket = wl_display_add_socket_auto(server.wl_display);
 	if (!socket) {
 		wlr_backend_destroy(server.backend);
