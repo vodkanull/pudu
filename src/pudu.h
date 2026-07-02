@@ -11,7 +11,6 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include <math.h>
 #include <linux/input-event-codes.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
@@ -62,23 +61,23 @@
 #define MASTER_RATIO 0.5f
 
 enum pudu_cursor_mode {
-	NULLWC_CURSOR_PASSTHROUGH,
-	NULLWC_CURSOR_MOVE,
-	NULLWC_CURSOR_RESIZE_H,
+	PUDU_CURSOR_PASSTHROUGH,
+	PUDU_CURSOR_MOVE,
+	PUDU_CURSOR_RESIZE_H,
 };
 
 enum pudu_action {
-	NULLWC_ACTION_NONE,
-	NULLWC_ACTION_CLOSE,
-	NULLWC_ACTION_EXEC,
-	NULLWC_ACTION_CYCLE_TOPLEVELS,
-	NULLWC_ACTION_SWAP_MASTER,
-	NULLWC_ACTION_WORKSPACE_NEXT,
-	NULLWC_ACTION_WORKSPACE_PREV,
-	NULLWC_ACTION_MOVE_WORKSPACE_NEXT,
-	NULLWC_ACTION_MOVE_WORKSPACE_PREV,
-	NULLWC_ACTION_EXIT,
-	NULLWC_ACTION_RELOAD,
+	PUDU_ACTION_NONE,
+	PUDU_ACTION_CLOSE,
+	PUDU_ACTION_EXEC,
+	PUDU_ACTION_CYCLE_TOPLEVELS,
+	PUDU_ACTION_SWAP_MASTER,
+	PUDU_ACTION_WORKSPACE_NEXT,
+	PUDU_ACTION_WORKSPACE_PREV,
+	PUDU_ACTION_MOVE_WORKSPACE_NEXT,
+	PUDU_ACTION_MOVE_WORKSPACE_PREV,
+	PUDU_ACTION_EXIT,
+	PUDU_ACTION_RELOAD,
 };
 
 struct pudu_binding {
@@ -365,7 +364,6 @@ void session_lock_handle_destroy(struct wl_listener *listener, void *data);
 
 /* Workspace */
 void view_workspace(struct pudu_server *server, int workspace);
-int get_dynamic_workspace_count(struct pudu_server *server);
 int workspace_window_count(struct pudu_server *server, int workspace);
 void sync_dynamic_workspaces(struct pudu_server *server);
 void server_new_keyboard(struct pudu_server *server, struct wlr_input_device *device);

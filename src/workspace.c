@@ -279,10 +279,6 @@ void view_workspace(struct pudu_server *server, int workspace) {
 	}
 }
 
-int get_dynamic_workspace_count(struct pudu_server *server) {
-	return server->workspace_count;
-}
-
 /* ext_workspace_handle_v1 request handlers */
 
 void workspace_handle_destroy(struct wl_client *client,

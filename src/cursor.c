@@ -99,7 +99,7 @@ void server_new_pointer_constraint(struct wl_listener *listener, void *data) {
 static void process_cursor_motion(struct pudu_server *server, uint32_t time) {
 	wlr_idle_notifier_v1_notify_activity(server->idle_notifier, server->seat);
 
-	if (server->cursor_mode == NULLWC_CURSOR_MOVE) {
+	if (server->cursor_mode == PUDU_CURSOR_MOVE) {
 		struct pudu_toplevel *t = server->grabbed_toplevel;
 		if (t) {
 			double new_x = server->cursor->x - server->grab_x;
@@ -109,7 +109,7 @@ static void process_cursor_motion(struct pudu_server *server, uint32_t time) {
 		return;
 	}
 
-	if (server->cursor_mode == NULLWC_CURSOR_RESIZE_H) {
+	if (server->cursor_mode == PUDU_CURSOR_RESIZE_H) {
 		struct wlr_output *wlr_output = wlr_output_layout_output_at(
 				server->output_layout, server->cursor->x, server->cursor->y);
 		if (!wlr_output) {
@@ -207,7 +207,7 @@ void server_cursor_motion_absolute(
 
 static void finish_move(struct pudu_server *server) {
 	struct pudu_toplevel *t = server->grabbed_toplevel;
-	server->cursor_mode = NULLWC_CURSOR_PASSTHROUGH;
+	server->cursor_mode = PUDU_CURSOR_PASSTHROUGH;
 	server->grabbed_toplevel = NULL;
 
 	if (!t) return;
@@ -284,12 +284,12 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
 	wlr_idle_notifier_v1_notify_activity(server->idle_notifier, server->seat);
 
 	if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
-		if (server->cursor_mode == NULLWC_CURSOR_MOVE) {
+		if (server->cursor_mode == PUDU_CURSOR_MOVE) {
 			finish_move(server);
 			return;
 		}
-		if (server->cursor_mode == NULLWC_CURSOR_RESIZE_H) {
-			server->cursor_mode = NULLWC_CURSOR_PASSTHROUGH;
+		if (server->cursor_mode == PUDU_CURSOR_RESIZE_H) {
+			server->cursor_mode = PUDU_CURSOR_PASSTHROUGH;
 			return;
 		}
 		wlr_seat_pointer_notify_button(server->seat,
@@ -337,7 +337,7 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
 				int master_fw = (int)(frames_w * server->master_ratio);
 				int border_x = area.x + og + master_fw;
 				if (server->cursor->x >= border_x - 8 && server->cursor->x <= border_x + ig + 8) {
-					server->cursor_mode = NULLWC_CURSOR_RESIZE_H;
+					server->cursor_mode = PUDU_CURSOR_RESIZE_H;
 					server->grab_x = server->cursor->x;
 					server->grab_y = server->cursor->y;
 					return;
@@ -355,7 +355,7 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
 			focus_toplevel(toplevel);
 			toplevel->floating = true;
 			wlr_xdg_toplevel_set_tiled(toplevel->xdg_toplevel, WLR_EDGE_NONE);
-			server->cursor_mode = NULLWC_CURSOR_MOVE;
+			server->cursor_mode = PUDU_CURSOR_MOVE;
 			server->grabbed_toplevel = toplevel;
 			server->grab_x = server->cursor->x - toplevel->scene_tree->node.x;
 			server->grab_y = server->cursor->y - toplevel->scene_tree->node.y;
@@ -470,11 +470,15 @@ void seat_request_start_drag(struct wl_listener *listener, void *data) {
 static void drag_icon_handle_commit(struct wl_listener *listener, void *data) {
 	struct pudu_server *server = wl_container_of(
 			listener, server, drag_icon_commit);
-	if (!server->drag_icon) {
+	if (!server->drag_icon || !server->seat->drag) {
 		return;
 	}
-	double lx = server->cursor->x - server->seat->drag->icon->surface->current.dx;
-	double ly = server->cursor->y - server->seat->drag->icon->surface->current.dy;
+	struct wlr_drag *drag = server->seat->drag;
+	if (!drag->icon || !drag->icon->surface) {
+		return;
+	}
+	double lx = server->cursor->x - drag->icon->surface->current.dx;
+	double ly = server->cursor->y - drag->icon->surface->current.dy;
 	wlr_scene_node_set_position(&server->drag_icon->node, lx, ly);
 }
 

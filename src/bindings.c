@@ -3,14 +3,14 @@
 void execute_binding(struct pudu_server *server,
 		struct pudu_binding *b) {
 	switch (b->action) {
-	case NULLWC_ACTION_CLOSE: {
+	case PUDU_ACTION_CLOSE: {
 		struct pudu_toplevel *toplevel = focused_toplevel(server);
 		if (toplevel) {
 			wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel);
 		}
 		break;
 	}
-	case NULLWC_ACTION_EXEC:
+	case PUDU_ACTION_EXEC:
 		if (fork() == 0) {
 			setsid();
 			long maxfd = sysconf(_SC_OPEN_MAX);
@@ -20,27 +20,27 @@ void execute_binding(struct pudu_server *server,
 			_exit(1);
 		}
 		break;
-	case NULLWC_ACTION_CYCLE_TOPLEVELS: {
+	case PUDU_ACTION_CYCLE_TOPLEVELS: {
 		cycle_focus(server);
 		break;
 	}
-	case NULLWC_ACTION_SWAP_MASTER: {
+	case PUDU_ACTION_SWAP_MASTER: {
 		swap_master(server);
 		break;
 	}
-	case NULLWC_ACTION_WORKSPACE_NEXT: {
+	case PUDU_ACTION_WORKSPACE_NEXT: {
 		int next_ws = server->current_workspace + 1;
 		if (next_ws > server->workspace_count) next_ws = 1;
 		view_workspace(server, next_ws);
 		break;
 	}
-	case NULLWC_ACTION_WORKSPACE_PREV: {
+	case PUDU_ACTION_WORKSPACE_PREV: {
 		int prev_ws = server->current_workspace - 1;
 		if (prev_ws < 1) prev_ws = server->workspace_count;
 		view_workspace(server, prev_ws);
 		break;
 	}
-	case NULLWC_ACTION_MOVE_WORKSPACE_NEXT: {
+	case PUDU_ACTION_MOVE_WORKSPACE_NEXT: {
 		struct pudu_toplevel *toplevel = focused_toplevel(server);
 		if (toplevel) {
 			int old_ws = toplevel->workspace;
@@ -61,7 +61,7 @@ void execute_binding(struct pudu_server *server,
 		}
 		break;
 	}
-	case NULLWC_ACTION_MOVE_WORKSPACE_PREV: {
+	case PUDU_ACTION_MOVE_WORKSPACE_PREV: {
 		struct pudu_toplevel *toplevel = focused_toplevel(server);
 		if (toplevel) {
 			int old_ws = toplevel->workspace;
@@ -83,10 +83,10 @@ void execute_binding(struct pudu_server *server,
 		}
 		break;
 	}
-	case NULLWC_ACTION_EXIT:
+	case PUDU_ACTION_EXIT:
 		wl_display_terminate(server->wl_display);
 		break;
-	case NULLWC_ACTION_RELOAD: {
+	case PUDU_ACTION_RELOAD: {
 		wlr_log(WLR_INFO, "Reloading config...");
 		load_config(server);
 		struct pudu_autostart *as;

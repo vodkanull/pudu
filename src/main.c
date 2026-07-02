@@ -317,6 +317,10 @@ int main(int argc, char *argv[]) {
 	wl_list_remove(&server.pointer_focus_change.link);
 	wl_list_remove(&server.request_set_selection.link);
 	wl_list_remove(&server.new_output.link);
+	wl_list_remove(&server.request_start_drag.link);
+	wl_list_remove(&server.start_drag.link);
+	wl_list_remove(&server.xdg_activation_request_activate.link);
+	wl_list_remove(&server.new_pointer_constraint.link);
 
 	wlr_scene_node_destroy(&server.scene->tree.node);
 	if (server.arrange_timer) {

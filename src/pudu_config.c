@@ -123,17 +123,17 @@ static void config_add_old_binding(struct pudu_server *server,
 	b->mods = mods;
 	b->sym = sym;
 
-	if (strcmp(action_str, "PUDU_CLOSE") == 0) b->action = NULLWC_ACTION_CLOSE;
-	else if (strcmp(action_str, "PUDU_EXIT") == 0) b->action = NULLWC_ACTION_EXIT;
-	else if (strcmp(action_str, "PUDU_CYCLE_TOPLEVELS") == 0) b->action = NULLWC_ACTION_CYCLE_TOPLEVELS;
-	else if (strcmp(action_str, "PUDU_SWAP_MASTER") == 0) b->action = NULLWC_ACTION_SWAP_MASTER;
-	else if (strcmp(action_str, "PUDU_WORKSPACE_NEXT") == 0) b->action = NULLWC_ACTION_WORKSPACE_NEXT;
-	else if (strcmp(action_str, "PUDU_WORKSPACE_PREV") == 0) b->action = NULLWC_ACTION_WORKSPACE_PREV;
-	else if (strcmp(action_str, "PUDU_WORKSPACE_MOVE_NEXT") == 0) b->action = NULLWC_ACTION_MOVE_WORKSPACE_NEXT;
-	else if (strcmp(action_str, "PUDU_WORKSPACE_MOVE_PREV") == 0) b->action = NULLWC_ACTION_MOVE_WORKSPACE_PREV;
-	else if (strcmp(action_str, "PUDU_RELOAD") == 0) b->action = NULLWC_ACTION_RELOAD;
+	if (strcmp(action_str, "PUDU_CLOSE") == 0) b->action = PUDU_ACTION_CLOSE;
+	else if (strcmp(action_str, "PUDU_EXIT") == 0) b->action = PUDU_ACTION_EXIT;
+	else if (strcmp(action_str, "PUDU_CYCLE_TOPLEVELS") == 0) b->action = PUDU_ACTION_CYCLE_TOPLEVELS;
+	else if (strcmp(action_str, "PUDU_SWAP_MASTER") == 0) b->action = PUDU_ACTION_SWAP_MASTER;
+	else if (strcmp(action_str, "PUDU_WORKSPACE_NEXT") == 0) b->action = PUDU_ACTION_WORKSPACE_NEXT;
+	else if (strcmp(action_str, "PUDU_WORKSPACE_PREV") == 0) b->action = PUDU_ACTION_WORKSPACE_PREV;
+	else if (strcmp(action_str, "PUDU_WORKSPACE_MOVE_NEXT") == 0) b->action = PUDU_ACTION_MOVE_WORKSPACE_NEXT;
+	else if (strcmp(action_str, "PUDU_WORKSPACE_MOVE_PREV") == 0) b->action = PUDU_ACTION_MOVE_WORKSPACE_PREV;
+	else if (strcmp(action_str, "PUDU_RELOAD") == 0) b->action = PUDU_ACTION_RELOAD;
 	else {
-		b->action = NULLWC_ACTION_EXEC;
+		b->action = PUDU_ACTION_EXEC;
 		b->command = strdup(action_str);
 	}
 
@@ -196,10 +196,7 @@ static bool config_parse_bool(const char *val) {
 }
 
 static void config_parse_kv(struct pudu_server *server, const char *key, const char *value) {
-	if (strcmp(key, "mod") == 0) {
-		uint32_t mod = modifier_from_name(value);
-		if (mod) server->mod_modifier = mod;
-	} else if (strcmp(key, "inner_gap") == 0) {
+	if (strcmp(key, "inner_gap") == 0) {
 		server->inner_gap = atoi(value);
 	} else if (strcmp(key, "outer_gap") == 0) {
 		server->outer_gap = atoi(value);
