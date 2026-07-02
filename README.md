@@ -13,9 +13,6 @@
 
 <img src="media/ss1.png" width="100%" alt="ss1">
 
-<img src="media/ss2.png" width="49%" alt="ss2">
-<img src="media/ss3.png" width="49%" alt="ss3">
-
 </div>
 
 ## Installation  
@@ -46,8 +43,12 @@ yay -S pudu-git
 >
 > See an example config 👉 [here](https://github.com/vodkanull/pudu/blob/main/src/config) 👈.
 
-> [!CAUTION]
-> The `blur` option requires GPU acceleration. On weak or integrated GPUs it may cause noticeable lag — disable it if you experience performance issues.
+<div align="center">
+
+<img src="media/ss2.png" width="49%" alt="ss2">
+<img src="media/ss3.png" width="49%" alt="ss3">
+
+</div>
 
 ----
 
