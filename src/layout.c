@@ -10,14 +10,14 @@ int arrange_anim_cb(void *data) {
 	struct pudu_server *server = data;
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	uint32_t now = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+	uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 
 	bool any_active = false;
 	struct pudu_toplevel *t;
 	wl_list_for_each(t, &server->toplevels, link) {
 		if (!t->arrange_animating || !t->mapped) continue;
 
-		uint32_t elapsed = now - t->arrange_anim_start;
+		uint64_t elapsed = now - t->arrange_anim_start;
 		int duration = server->arrange_anim_ms;
 		if (duration <= 0) duration = 1;
 
@@ -75,7 +75,7 @@ static void set_tiled(struct pudu_toplevel *t, int x, int y, int w, int h) {
 		if (!t->arrange_animating) {
 			struct timespec ts;
 			clock_gettime(CLOCK_MONOTONIC, &ts);
-			t->arrange_anim_start = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+			t->arrange_anim_start = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 		}
 		t->arrange_animating = true;
 		if (server->arrange_timer) {
@@ -161,7 +161,8 @@ void arrange_workspace(struct pudu_server *server, int workspace) {
 	int stack_fw = MAX(1, frames_w - master_fw);
 
 	struct pudu_toplevel *master = NULL;
-	struct pudu_toplevel *stack_wins[64];
+	struct pudu_toplevel **stack_wins = calloc(count, sizeof(*stack_wins));
+	if (!stack_wins) return;
 	int n_stack = 0;
 	wl_list_for_each(t, &server->toplevels, link) {
 		if (t->workspace != workspace || !t->mapped || t->fullscreen || t->floating) continue;
@@ -202,13 +203,14 @@ void arrange_workspace(struct pudu_server *server, int workspace) {
 				}
 			}
 		}
-		if (floated) { arrange_workspace(server, workspace); return; }
+		if (floated) { free(stack_wins); arrange_workspace(server, workspace); return; }
 	}
 
 	int available_h = MAX(1, area.height - 2 * og);
 	int master_ch = available_h;
 
-	int stack_heights[64];
+	int *stack_heights = calloc(n_stack > 0 ? n_stack : 1, sizeof(*stack_heights));
+	if (!stack_heights) { free(stack_wins); return; }
 	int total_min_h = 0;
 	bool stack_has_min = false;
 	for (int i = 0; i < n_stack; i++) {
@@ -239,7 +241,7 @@ void arrange_workspace(struct pudu_server *server, int workspace) {
 					center_toplevel(stack_wins[i]);
 				}
 			}
-			if (floated) { arrange_workspace(server, workspace); return; }
+			if (floated) { free(stack_wins); free(stack_heights); arrange_workspace(server, workspace); return; }
 			int frame_h = MAX(1, (available_h - (n_stack - 1) * ig) / n_stack);
 			for (int i = 0; i < n_stack; i++) stack_heights[i] = frame_h;
 		}
@@ -262,6 +264,8 @@ void arrange_workspace(struct pudu_server *server, int workspace) {
 			fy, stack_fw, h);
 		fy += h + ig;
 	}
+	free(stack_wins);
+	free(stack_heights);
 }
 
 void cycle_focus(struct pudu_server *server) {

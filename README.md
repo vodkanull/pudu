@@ -3,11 +3,10 @@
 </div>
 
 > [!NOTE]
->🦌 **pudu** is a minimal tiling Wayland compositor built on top of wlroots.
+>🦌 **pudu** is a minimalist, lightweight tiling Wayland compositor based on wlroots, with a dash of eye candy.
 >
 >It's early-stage and a solo hobby project, **so bugs are part of the deal**.
 >Take it easy and file an issue if something breaks.
-
 
 <div align="center">
 
@@ -49,8 +48,6 @@ yay -S pudu-git
 <img src="media/ss3.png" width="49%" alt="ss3">
 
 </div>
-
-----
 
 > [!NOTE]
 >  **👇 Contributing**

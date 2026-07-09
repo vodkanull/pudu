@@ -227,8 +227,8 @@ static int border_anim_cb(void *data) {
 
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	uint32_t now = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
-	uint32_t elapsed = now - toplevel->border_anim_start;
+	uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+	uint64_t elapsed = now - toplevel->border_anim_start;
 	int duration = toplevel->server->border_transition_ms;
 	if (duration <= 0) duration = 1;
 
@@ -257,7 +257,7 @@ static void start_border_animation(struct pudu_toplevel *toplevel, const float t
 
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	toplevel->border_anim_start = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+	toplevel->border_anim_start = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 	toplevel->border_animating = true;
 
 	if (!toplevel->border_anim_timer) {
@@ -519,7 +519,6 @@ void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&toplevel->unmap.link);
 	wl_list_remove(&toplevel->commit.link);
 	wl_list_remove(&toplevel->destroy.link);
-	wl_list_remove(&toplevel->request_move.link);
 	wl_list_remove(&toplevel->request_maximize.link);
 	wl_list_remove(&toplevel->request_fullscreen.link);
 	wl_list_remove(&toplevel->set_title.link);
@@ -624,10 +623,6 @@ void apply_fullscreen_state(struct pudu_toplevel *toplevel, bool fullscreen, str
 
 	wlr_xdg_surface_schedule_configure(xdg->base);
 	server_update_layer_visibility(server);
-}
-
-void xdg_toplevel_request_move(
-		struct wl_listener *listener, void *data) {
 }
 
 void xdg_toplevel_request_maximize(
@@ -830,8 +825,6 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	toplevel->destroy.notify = xdg_toplevel_destroy;
 	wl_signal_add(&xdg_toplevel->events.destroy, &toplevel->destroy);
 
-	toplevel->request_move.notify = xdg_toplevel_request_move;
-	wl_signal_add(&xdg_toplevel->events.request_move, &toplevel->request_move);
 	toplevel->request_maximize.notify = xdg_toplevel_request_maximize;
 	wl_signal_add(&xdg_toplevel->events.request_maximize, &toplevel->request_maximize);
 	toplevel->request_fullscreen.notify = xdg_toplevel_request_fullscreen;

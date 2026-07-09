@@ -117,9 +117,9 @@ static void output_frame_blur(struct pudu_output *output,
 
 	struct wlr_scene_tree *fg_trees[] = {
 		server->toplevel_tree, server->top_tree,
-		server->overlay_tree, server->lock_tree,
+		server->overlay_tree,
 	};
-	int n_fg = 4;
+	int n_fg = 3;
 
 	struct wlr_swapchain *sc = wlr_swapchain_create(
 		server->allocator, ow, oh, fmt);

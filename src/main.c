@@ -55,8 +55,16 @@ static void setup_portals(void) {
 	if (pid == 0) {
 		setsid();
 		close_all_fds();
-		execl("/usr/lib/xdg-desktop-portal", "xdg-desktop-portal",
-			"--replace", (char *)NULL);
+		static const char *paths[] = {
+			"/usr/libexec/xdg-desktop-portal",
+			"/usr/lib/xdg-desktop-portal",
+			"/usr/local/libexec/xdg-desktop-portal",
+			"/usr/local/lib/xdg-desktop-portal",
+			NULL
+		};
+		for (int i = 0; paths[i]; i++) {
+			execl(paths[i], "xdg-desktop-portal", "--replace", (char *)NULL);
+		}
 		wlr_log(WLR_ERROR, "setup_portals: failed to exec xdg-desktop-portal");
 		_exit(1);
 	}
@@ -66,8 +74,16 @@ static void setup_portals(void) {
 	if (pid == 0) {
 		setsid();
 		close_all_fds();
-		execl("/usr/lib/xdg-desktop-portal-wlr", "xdg-desktop-portal-wlr",
-			"--replace", "--loglevel", "INFO", (char *)NULL);
+		static const char *paths[] = {
+			"/usr/libexec/xdg-desktop-portal-wlr",
+			"/usr/lib/xdg-desktop-portal-wlr",
+			"/usr/local/libexec/xdg-desktop-portal-wlr",
+			"/usr/local/lib/xdg-desktop-portal-wlr",
+			NULL
+		};
+		for (int i = 0; paths[i]; i++) {
+			execl(paths[i], "xdg-desktop-portal-wlr", "--replace", "--loglevel", "INFO", (char *)NULL);
+		}
 		wlr_log(WLR_ERROR, "setup_portals: failed to exec xdg-desktop-portal-wlr");
 		_exit(1);
 	}
@@ -77,6 +93,7 @@ static void setup_portals(void) {
 int main(int argc, char *argv[]) {
 	wlr_log_init(WLR_DEBUG, NULL);
 	signal(SIGPIPE, SIG_IGN);
+	signal(SIGCHLD, SIG_IGN);
 	char *startup_cmd = NULL;
 
 	int c;

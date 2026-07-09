@@ -1,5 +1,14 @@
 # Changelogs
 
+## v0.1.4
+
+| |
+|---|
+| Overflow fix in animations (`uint32_t` → `uint64_t`) no longer break after ~50 days of uptime |
+| The `xdg-desktop-portal` paths are no longer hardcoded to `/usr/lib/`, now it tries multiple locations |
+| Dynamic window limit in stack (no longer limited to 64) |
+| The lock screen no longer hides during blur rendering |
+
 ## v0.1.3
 
 | |

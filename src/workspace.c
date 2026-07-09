@@ -102,8 +102,8 @@ double ease_out_cubic(double t) {
 int workspace_animation_tick(struct pudu_server *server) {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	uint32_t now = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
-	uint32_t elapsed = now - server->anim_start_time;
+	uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+	uint64_t elapsed = now - server->anim_start_time;
 
 	double progress = (double)elapsed / ANIM_DURATION_MS;
 	if (progress > 1.0) progress = 1.0;
@@ -272,7 +272,7 @@ void view_workspace(struct pudu_server *server, int workspace) {
 
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	server->anim_start_time = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+	server->anim_start_time = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 	server->animating = true;
 	if (wlr_output) {
 		wlr_output_schedule_frame(wlr_output);
@@ -294,18 +294,6 @@ void workspace_handle_activate(struct wl_client *client,
 	}
 }
 
-void workspace_handle_deactivate(struct wl_client *client,
-		struct wl_resource *resource) {
-}
-
-void workspace_handle_remove(struct wl_client *client,
-		struct wl_resource *resource) {
-}
-
-void workspace_handle_assign(struct wl_client *client,
-		struct wl_resource *resource, struct wl_resource *workspace_group) {
-}
-
 void workspace_handle_resource_destroyed(struct wl_resource *resource) {
 	wl_list_remove(&resource->link);
 }
@@ -313,16 +301,12 @@ void workspace_handle_resource_destroyed(struct wl_resource *resource) {
 static const struct ext_workspace_handle_v1_interface workspace_handle_impl = {
 	.destroy = workspace_handle_destroy,
 	.activate = workspace_handle_activate,
-	.deactivate = workspace_handle_deactivate,
-	.remove = workspace_handle_remove,
-	.assign = workspace_handle_assign,
+	.deactivate = NULL,
+	.remove = NULL,
+	.assign = NULL,
 };
 
 /* ext_workspace_group_handle_v1 request handlers */
-
-void group_handle_create_workspace(struct wl_client *client,
-		struct wl_resource *resource, const char *name) {
-}
 
 void group_handle_destroy(struct wl_client *client,
 		struct wl_resource *resource) {
@@ -337,15 +321,11 @@ void group_handle_resource_destroyed(struct wl_resource *resource) {
 }
 
 static const struct ext_workspace_group_handle_v1_interface group_handle_impl = {
-	.create_workspace = group_handle_create_workspace,
+	.create_workspace = NULL,
 	.destroy = group_handle_destroy,
 };
 
 /* ext_workspace_manager_v1 request handlers */
-
-void manager_handle_commit(struct wl_client *client,
-		struct wl_resource *resource) {
-}
 
 void manager_handle_stop(struct wl_client *client,
 		struct wl_resource *resource) {
@@ -362,7 +342,7 @@ void manager_handle_resource_destroyed(struct wl_resource *resource) {
 }
 
 static const struct ext_workspace_manager_v1_interface manager_impl = {
-	.commit = manager_handle_commit,
+	.commit = NULL,
 	.stop = manager_handle_stop,
 };
 

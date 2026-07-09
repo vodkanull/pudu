@@ -1,6 +1,5 @@
 #pragma once
 
-#include <assert.h>
 #include <math.h>
 #include <ctype.h>
 #include <stdbool.h>
@@ -8,7 +7,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 #include <linux/input-event-codes.h>
@@ -56,7 +54,6 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-#define ANIM_FRAMES 14
 #define MAX_ANIM_TOPLEVELS 64
 #define MASTER_RATIO 0.5f
 
@@ -97,7 +94,6 @@ struct pudu_toplevel {
 	struct wl_listener unmap;
 	struct wl_listener commit;
 	struct wl_listener destroy;
-	struct wl_listener request_move;
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
 	struct wlr_foreign_toplevel_handle_v1 *foreign_handle;
@@ -121,7 +117,7 @@ struct pudu_toplevel {
 	float border_color[4];
 	float border_start[4];
 	float border_target[4];
-	uint32_t border_anim_start;
+	uint64_t border_anim_start;
 	bool border_animating;
 	struct wl_event_source *border_anim_timer;
 	int workspace;
@@ -134,7 +130,7 @@ struct pudu_toplevel {
 	double arrange_from_x, arrange_from_y;
 	double arrange_to_x, arrange_to_y;
 	bool arrange_animating;
-	uint32_t arrange_anim_start;
+	uint64_t arrange_anim_start;
 };
 
 struct pudu_popup {
@@ -275,7 +271,7 @@ struct pudu_server {
 	double anim_old_y[MAX_ANIM_TOPLEVELS];
 	double anim_new_x[MAX_ANIM_TOPLEVELS];
 	double anim_new_y[MAX_ANIM_TOPLEVELS];
-	uint32_t anim_start_time;
+	uint64_t anim_start_time;
 	double anim_slide_dist;
 	int anim_new_workspace;
 	int anim_direction;
