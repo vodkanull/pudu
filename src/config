@@ -14,8 +14,6 @@ ui {
     border_active       #c574dd
     border_inactive     #3e304c
     border_transition   100
-    blur                false
-    blur_strength       6
     new_is_master       false
     workspace_count     5
 }

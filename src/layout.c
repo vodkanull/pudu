@@ -40,6 +40,10 @@ int arrange_anim_cb(void *data) {
 	}
 
 	if (any_active) {
+		struct pudu_output *output;
+		wl_list_for_each(output, &server->outputs, link) {
+			wlr_output_schedule_frame(output->wlr_output);
+		}
 		wl_event_source_timer_update(server->arrange_timer, 16);
 	}
 	return 0;
@@ -72,11 +76,9 @@ static void set_tiled(struct pudu_toplevel *t, int x, int y, int w, int h) {
 		t->arrange_from_y = cur_y;
 		t->arrange_to_x = x;
 		t->arrange_to_y = y;
-		if (!t->arrange_animating) {
-			struct timespec ts;
-			clock_gettime(CLOCK_MONOTONIC, &ts);
-			t->arrange_anim_start = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-		}
+		struct timespec ts;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		t->arrange_anim_start = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 		t->arrange_animating = true;
 		if (server->arrange_timer) {
 			wl_event_source_timer_update(server->arrange_timer, 16);

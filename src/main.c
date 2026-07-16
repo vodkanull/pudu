@@ -129,9 +129,6 @@ int main(int argc, char *argv[]) {
 	server.border_radius = 0;
 	server.arrange_anim_ms = 300;
 	server.arrange_anim = true;
-	server.blur = false;
-	server.blur_opacity = 1.0f;
-	server.blur_strength = 6;
 	server.mod_modifier = WLR_MODIFIER_LOGO;
 	server.new_is_master = true;
 	server.current_workspace = 1;

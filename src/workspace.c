@@ -327,6 +327,10 @@ static const struct ext_workspace_group_handle_v1_interface group_handle_impl = 
 
 /* ext_workspace_manager_v1 request handlers */
 
+void manager_handle_commit(struct wl_client *client,
+		struct wl_resource *resource) {
+}
+
 void manager_handle_stop(struct wl_client *client,
 		struct wl_resource *resource) {
 	ext_workspace_manager_v1_send_finished(resource);
@@ -342,7 +346,7 @@ void manager_handle_resource_destroyed(struct wl_resource *resource) {
 }
 
 static const struct ext_workspace_manager_v1_interface manager_impl = {
-	.commit = NULL,
+	.commit = manager_handle_commit,
 	.stop = manager_handle_stop,
 };
 

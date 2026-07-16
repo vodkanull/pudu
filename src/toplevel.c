@@ -791,9 +791,6 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	toplevel->scene_tree->node.data = toplevel;
 	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
 
-	toplevel->blur_bg = wlr_scene_buffer_create(toplevel->scene_tree, NULL);
-	wlr_scene_node_set_enabled(&toplevel->blur_bg->node, false);
-
 	struct wlr_scene_tree *xdg_tree = wlr_scene_xdg_surface_create(
 		toplevel->scene_tree, xdg_toplevel->base);
 	if (xdg_tree == NULL) {

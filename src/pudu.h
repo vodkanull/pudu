@@ -109,7 +109,6 @@ struct pudu_toplevel {
 	struct wlr_scene_tree *border_tree;
 	struct wlr_scene_rect *border_rects[4];
 	struct wlr_scene_buffer *border_buffer;
-	struct wlr_scene_buffer *blur_bg;
 	int border_w;
 	int border_h;
 	int border_b;
@@ -189,6 +188,7 @@ struct pudu_layer_surface {
 };
 
 struct pudu_output;
+struct wlr_swapchain;
 
 struct pudu_server {
 	struct wl_display *wl_display;
@@ -248,9 +248,6 @@ struct pudu_server {
 	int arrange_anim_ms;
 	bool arrange_anim;
 	bool natural_scroll;
-	bool blur;
-	float blur_opacity;
-	int blur_strength;
 	bool new_is_master;
 	uint32_t mod_modifier;
 	int workspace_count;
@@ -305,6 +302,11 @@ struct pudu_server {
 	struct wl_list workspaces;
 	struct wl_list manager_clients;
 	struct wl_global *workspace_manager_global;
+
+	/* Config error overlay */
+	struct wlr_scene_tree *config_error_tree;
+	struct wlr_scene_buffer *config_error_buf;
+	char config_error_msg[512];
 
 };
 
@@ -383,6 +385,8 @@ void seat_destroy_drag(struct wl_listener *listener, void *data);
 
 /* Config */
 void load_config(struct pudu_server *server);
+void render_config_error(struct pudu_server *server);
+void clear_config_error(struct pudu_server *server);
 bool handle_keybinding(struct pudu_server *server, xkb_keysym_t sym, uint32_t mods);
 void execute_binding(struct pudu_server *server, struct pudu_binding *b);
 int workspace_animation_tick(struct pudu_server *server);

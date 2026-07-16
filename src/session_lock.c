@@ -7,11 +7,21 @@ void session_lock_handle_new_surface(struct wl_listener *listener, void *data) {
 	wlr_scene_surface_create(tree, lock_surface->surface);
 	wlr_session_lock_surface_v1_configure(lock_surface,
 			lock_surface->output->width, lock_surface->output->height);
+
+	struct wlr_keyboard *kb = wlr_seat_get_keyboard(server->seat);
+	if (kb) {
+		wlr_seat_keyboard_notify_enter(server->seat,
+			lock_surface->surface,
+			kb->keycodes, kb->num_keycodes, &kb->modifiers);
+	}
 }
 
 void session_lock_handle_unlock(struct wl_listener *listener, void *data) {
 	struct pudu_server *server = wl_container_of(listener, server, session_lock_unlock);
 	wlr_scene_node_set_enabled(&server->lock_tree->node, false);
+	wl_list_remove(&server->session_lock_new_surface.link);
+	wl_list_remove(&server->session_lock_unlock.link);
+	wl_list_remove(&server->session_lock_destroy.link);
 	server->cur_lock = NULL;
 }
 
@@ -19,6 +29,9 @@ void session_lock_handle_destroy(struct wl_listener *listener, void *data) {
 	struct pudu_server *server = wl_container_of(listener, server, session_lock_destroy);
 	if (server->cur_lock) {
 		wlr_scene_node_set_enabled(&server->lock_tree->node, false);
+		wl_list_remove(&server->session_lock_new_surface.link);
+		wl_list_remove(&server->session_lock_unlock.link);
+		wl_list_remove(&server->session_lock_destroy.link);
 		server->cur_lock = NULL;
 	}
 }

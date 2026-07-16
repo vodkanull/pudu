@@ -20,14 +20,15 @@ void keyboard_handle_key(
 	wlr_idle_notifier_v1_notify_activity(server->idle_notifier, seat);
 
 	uint32_t keycode = event->keycode + 8;
-	const xkb_keysym_t *syms;
-	int nsyms = xkb_state_key_get_syms(
-			keyboard->wlr_keyboard->xkb_state, keycode, &syms);
 
 	if (!keyboard->wlr_keyboard->xkb_state) {
 		wlr_log(WLR_ERROR, "key event but xkb_state is NULL");
 		return;
 	}
+
+	const xkb_keysym_t *syms;
+	int nsyms = xkb_state_key_get_syms(
+			keyboard->wlr_keyboard->xkb_state, keycode, &syms);
 
 	wlr_log(WLR_DEBUG, "key event: keycode=%u nsyms=%d state=%s",
 		keycode, nsyms,
@@ -35,16 +36,16 @@ void keyboard_handle_key(
 
 	bool handled = false;
 	uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
-		if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-			for (int i = 0; i < nsyms; i++) {
-				wlr_log(WLR_DEBUG, "  sym[%d]=0x%x mods=0x%x count=%d", i, syms[i], modifiers,
-					workspace_window_count(server, server->current_workspace));
-				handled = handle_keybinding(server, syms[i], modifiers);
-			}
-			if (handled) {
-				wlr_log(WLR_DEBUG, "  binding handled -> exec");
-			}
+	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && !server->cur_lock) {
+		for (int i = 0; i < nsyms; i++) {
+			wlr_log(WLR_DEBUG, "  sym[%d]=0x%x mods=0x%x count=%d", i, syms[i], modifiers,
+				workspace_window_count(server, server->current_workspace));
+			handled = handle_keybinding(server, syms[i], modifiers);
 		}
+		if (handled) {
+			wlr_log(WLR_DEBUG, "  binding handled -> exec");
+		}
+	}
 
 	if (!handled) {
 		wlr_seat_set_keyboard(seat, keyboard->wlr_keyboard);

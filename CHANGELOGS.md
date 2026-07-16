@@ -1,5 +1,17 @@
 # Changelogs
 
+## v0.1.5
+
+| |
+|---|
+| Blur temporarily removed |
+| Fix crash when unlocking with Hyprlock (the lock-screen could now be any session-lock compatible program) |
+| The session-lock listeners are now properly cleaned up on unlock or destroy |
+| Fix NULL xkb_state dereference crash on keyboard key event |
+| Fix config reload clearing keybindings before confirming the file was readable |
+| Malformed configs are rejected atomically (no partial apply) |
+| Config error overlay: persistent on-screen error message shown until config is fixed |
+
 ## v0.1.4
 
 | |
