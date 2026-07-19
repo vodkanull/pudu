@@ -64,6 +64,49 @@ void keyboard_handle_destroy(struct wl_listener *listener, void *data) {
 	free(keyboard);
 }
 
+static bool apply_layout_to_keyboard(struct pudu_server *server,
+		struct wlr_keyboard *wlr_keyboard) {
+	struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+	if (!context) return false;
+
+	struct xkb_rule_names rules = {
+		.rules = NULL,
+		.model = NULL,
+		.layout = server->keyboard_layout[0] ? server->keyboard_layout : NULL,
+		.variant = NULL,
+		.options = NULL,
+	};
+
+	struct xkb_keymap *keymap = xkb_keymap_new_from_names(context,
+		rules.layout ? &rules : NULL,
+		XKB_KEYMAP_COMPILE_NO_FLAGS);
+
+	if (!keymap) {
+		wlr_log(WLR_ERROR, "failed to load keymap with layout='%s', falling back to US layout",
+			rules.layout ? rules.layout : "(system)");
+		rules.layout = "us";
+		keymap = xkb_keymap_new_from_names(context, &rules,
+			XKB_KEYMAP_COMPILE_NO_FLAGS);
+		if (!keymap) {
+			wlr_log(WLR_ERROR, "failed to load US fallback keymap either");
+			xkb_context_unref(context);
+			return false;
+		}
+	}
+
+	wlr_keyboard_set_keymap(wlr_keyboard, keymap);
+	xkb_keymap_unref(keymap);
+	xkb_context_unref(context);
+	return true;
+}
+
+void server_apply_keyboard_layout(struct pudu_server *server) {
+	struct pudu_keyboard *keyboard;
+	wl_list_for_each(keyboard, &server->keyboards, link) {
+		apply_layout_to_keyboard(server, keyboard->wlr_keyboard);
+	}
+}
+
 void server_new_keyboard(struct pudu_server *server,
 		struct wlr_input_device *device) {
 	struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(device);
@@ -74,32 +117,11 @@ void server_new_keyboard(struct pudu_server *server,
 	keyboard->server = server;
 	keyboard->wlr_keyboard = wlr_keyboard;
 
-	struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-	struct xkb_keymap *keymap = xkb_keymap_new_from_names(context, NULL,
-		XKB_KEYMAP_COMPILE_NO_FLAGS);
-
-	if (!keymap) {
-		wlr_log(WLR_ERROR, "failed to load system keymap, falling back to US layout");
-		struct xkb_rule_names rules = {
-			.rules = NULL,
-			.model = NULL,
-			.layout = "us",
-			.variant = NULL,
-			.options = NULL,
-		};
-		keymap = xkb_keymap_new_from_names(context, &rules,
-			XKB_KEYMAP_COMPILE_NO_FLAGS);
-		if (!keymap) {
-			wlr_log(WLR_ERROR, "failed to load US fallback keymap either");
-			xkb_context_unref(context);
-			free(keyboard);
-			return;
-		}
+	if (!apply_layout_to_keyboard(server, wlr_keyboard)) {
+		free(keyboard);
+		return;
 	}
 
-	wlr_keyboard_set_keymap(wlr_keyboard, keymap);
-	xkb_keymap_unref(keymap);
-	xkb_context_unref(context);
 	wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
 
 	keyboard->modifiers.notify = keyboard_handle_modifiers;

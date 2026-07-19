@@ -1,5 +1,16 @@
 # Changelogs
 
+## v0.1.6
+
+| |
+|---|
+| Config error overlay redesigned as a top bar |
+| Fix autostart programs launching twice on config reload with syntax errors |
+| Multi-monitor: (only mirror for now) |
+| Fix dialog windows |
+| Configurable `keyboard_layout` in the `input` section to set the xkb keyboard layout (e.g. `us`, `latam`, `es`) |
+| Arrange animation now also animates window resize (position + size), not just position |
+
 ## v0.1.5
 
 | |

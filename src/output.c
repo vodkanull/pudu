@@ -63,6 +63,7 @@ void output_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&output->destroy.link);
 	wl_list_remove(&output->bind.link);
 	wl_list_remove(&output->link);
+	workspace_update_toplevel_visibility(output->server);
 	free(output);
 }
 
@@ -100,12 +101,13 @@ void server_new_output(struct wl_listener *listener, void *data) {
 	wl_list_insert(&server->outputs, &output->link);
 
 	struct wlr_output_layout_output *l_output =
-		wlr_output_layout_add_auto(server->output_layout, wlr_output);
+		wlr_output_layout_add(server->output_layout, wlr_output, 0, 0);
 	struct wlr_scene_output *scene_output =
 		wlr_scene_output_create(server->scene, wlr_output);
 	wlr_scene_output_layout_add_output(server->scene_layout, l_output, scene_output);
 
 	arrange_layers(output);
+	workspace_update_toplevel_visibility(server);
 
 	if (server->config_error_msg[0]) {
 		render_config_error(server);

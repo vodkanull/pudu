@@ -91,7 +91,7 @@ void workspace_update_toplevel_visibility(struct pudu_server *server) {
 	struct pudu_toplevel *t;
 	wl_list_for_each(t, &server->toplevels, link) {
 		bool visible = (t->workspace == server->current_workspace);
-		wlr_scene_node_set_enabled(&t->scene_tree->node, visible);
+		wlr_scene_node_set_enabled(&t->scene_tree->node, visible && t->mapped);
 	}
 }
 

@@ -30,6 +30,16 @@ int arrange_anim_cb(void *data) {
 		double y = t->arrange_from_y + (t->arrange_to_y - t->arrange_from_y) * eased;
 		wlr_scene_node_set_position(&t->scene_tree->node, x, y);
 
+		double w = t->arrange_from_w + (t->arrange_to_w - t->arrange_from_w) * eased;
+		double h = t->arrange_from_h + (t->arrange_to_h - t->arrange_from_h) * eased;
+		int b = server->active_border_size;
+		int cw = (int)(w - 2 * b);
+		int ch = (int)(h - 2 * b);
+		if (cw < 1) cw = 1;
+		if (ch < 1) ch = 1;
+		wlr_xdg_toplevel_set_size(t->xdg_toplevel, (uint32_t)cw, (uint32_t)ch);
+		wlr_xdg_surface_schedule_configure(t->xdg_toplevel->base);
+
 		if (progress >= 1.0) {
 			t->arrange_animating = false;
 			wlr_scene_node_set_position(&t->scene_tree->node,
@@ -61,12 +71,16 @@ static void set_tiled(struct pudu_toplevel *t, int x, int y, int w, int h) {
 	struct pudu_server *server = t->server;
 	double cur_x = t->scene_tree->node.x;
 	double cur_y = t->scene_tree->node.y;
+	double cur_w = t->allocated.width;
+	double cur_h = t->allocated.height;
 	double dx = fabs(cur_x - x);
 	double dy = fabs(cur_y - y);
+	double dw = fabs(cur_w - w);
+	double dh = fabs(cur_h - h);
 	bool skip_anim = !server->arrange_anim ||
 		(server->arrange_anim_ms <= 0) ||
-		(t->allocated.width == 0 && t->allocated.height == 0) ||
-		(dx < 1.0 && dy < 1.0);
+		(cur_w == 0 && cur_h == 0) ||
+		(dx < 1.0 && dy < 1.0 && dw < 1.0 && dh < 1.0);
 
 	if (skip_anim) {
 		wlr_scene_node_set_position(&t->scene_tree->node, x, y);
@@ -76,6 +90,10 @@ static void set_tiled(struct pudu_toplevel *t, int x, int y, int w, int h) {
 		t->arrange_from_y = cur_y;
 		t->arrange_to_x = x;
 		t->arrange_to_y = y;
+		t->arrange_from_w = cur_w;
+		t->arrange_from_h = cur_h;
+		t->arrange_to_w = w;
+		t->arrange_to_h = h;
 		struct timespec ts;
 		clock_gettime(CLOCK_MONOTONIC, &ts);
 		t->arrange_anim_start = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
@@ -91,14 +109,17 @@ static void set_tiled(struct pudu_toplevel *t, int x, int y, int w, int h) {
 	}
 	wlr_scene_node_set_position(&t->border_tree->node, b, b);
 
-	wlr_xdg_toplevel_set_size(t->xdg_toplevel, (uint32_t)cw, (uint32_t)ch);
+	/* Defer size change if animating — layout size will be set during animation */
+	if (skip_anim) {
+		wlr_xdg_toplevel_set_size(t->xdg_toplevel, (uint32_t)cw, (uint32_t)ch);
+		wlr_xdg_surface_schedule_configure(t->xdg_toplevel->base);
+	}
 	wlr_xdg_toplevel_set_tiled(t->xdg_toplevel,
 		WLR_EDGE_LEFT | WLR_EDGE_RIGHT | WLR_EDGE_TOP | WLR_EDGE_BOTTOM);
 	t->allocated.x = x;
 	t->allocated.y = y;
 	t->allocated.width = w;
 	t->allocated.height = h;
-	wlr_xdg_surface_schedule_configure(t->xdg_toplevel->base);
 }
 
 static bool win_has_min(struct pudu_toplevel *t, int *min_w, int *min_h) {
@@ -107,12 +128,7 @@ static bool win_has_min(struct pudu_toplevel *t, int *min_w, int *min_h) {
 	return *min_w > 0 || *min_h > 0;
 }
 
-void arrange_workspace(struct pudu_server *server, int workspace) {
-	struct wlr_output *wlr_output = wlr_output_layout_output_at(
-			server->output_layout, server->cursor->x, server->cursor->y);
-	if (!wlr_output) {
-		wlr_output = wlr_output_layout_get_center_output(server->output_layout);
-	}
+void arrange_workspace_on_output(struct pudu_server *server, int workspace, struct wlr_output *wlr_output) {
 	if (!wlr_output) return;
 
 	struct pudu_output *output = output_from_wlr_output(server, wlr_output);
@@ -205,7 +221,7 @@ void arrange_workspace(struct pudu_server *server, int workspace) {
 				}
 			}
 		}
-		if (floated) { free(stack_wins); arrange_workspace(server, workspace); return; }
+		if (floated) { free(stack_wins); arrange_workspace_on_output(server, workspace, wlr_output); return; }
 	}
 
 	int available_h = MAX(1, area.height - 2 * og);
@@ -243,7 +259,7 @@ void arrange_workspace(struct pudu_server *server, int workspace) {
 					center_toplevel(stack_wins[i]);
 				}
 			}
-			if (floated) { free(stack_wins); free(stack_heights); arrange_workspace(server, workspace); return; }
+			if (floated) { free(stack_wins); free(stack_heights); arrange_workspace_on_output(server, workspace, wlr_output); return; }
 			int frame_h = MAX(1, (available_h - (n_stack - 1) * ig) / n_stack);
 			for (int i = 0; i < n_stack; i++) stack_heights[i] = frame_h;
 		}
@@ -268,6 +284,19 @@ void arrange_workspace(struct pudu_server *server, int workspace) {
 	}
 	free(stack_wins);
 	free(stack_heights);
+}
+
+void arrange_workspace(struct pudu_server *server, int workspace) {
+	struct wlr_output *wlr_output = wlr_output_layout_output_at(
+			server->output_layout, server->cursor->x, server->cursor->y);
+	if (!wlr_output) {
+		wlr_output = wlr_output_layout_get_center_output(server->output_layout);
+	}
+	if (!wlr_output) return;
+
+	if (workspace == server->current_workspace) {
+		arrange_workspace_on_output(server, workspace, wlr_output);
+	}
 }
 
 void cycle_focus(struct pudu_server *server) {

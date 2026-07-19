@@ -102,6 +102,7 @@ struct pudu_config {
 	bool new_is_master;
 	uint32_t mod_modifier;
 	int workspace_count;
+	char keyboard_layout[64];
 	struct wl_list bindings;
 	struct wl_list autostarts;
 	bool ok;
@@ -390,6 +391,8 @@ static bool config_parse_kv(struct pudu_config *cfg,
 		}
 		int n = atoi(value);
 		if (n >= 1) cfg->workspace_count = n;
+	} else if (strcmp(key, "keyboard_layout") == 0) {
+		strncpy(cfg->keyboard_layout, value, sizeof(cfg->keyboard_layout) - 1);
 	} else {
 		if (cfg->ok) {
 			cfg->ok = false;
@@ -399,15 +402,6 @@ static bool config_parse_kv(struct pudu_config *cfg,
 		return false;
 	}
 	return true;
-}
-
-static void rounded_rect(cairo_t *cr, double x, double y, double w, double h, double r) {
-	cairo_new_sub_path(cr);
-	cairo_arc(cr, x + r, y + r, r, M_PI, 3 * M_PI / 2);
-	cairo_arc(cr, x + w - r, y + r, r, 3 * M_PI / 2, 2 * M_PI);
-	cairo_arc(cr, x + w - r, y + h - r, r, 0, M_PI / 2);
-	cairo_arc(cr, x + r, y + h - r, r, M_PI / 2, M_PI);
-	cairo_close_path(cr);
 }
 
 /* Config error overlay rendering */
@@ -455,65 +449,58 @@ static struct wlr_buffer *create_error_buffer(int w, int h, const char *msg) {
 		buf->data, CAIRO_FORMAT_ARGB32, w, h, w * 4);
 	cairo_t *cr = cairo_create(surface);
 
-	/* Background */
-	cairo_set_source_rgba(cr, 0.08, 0.08, 0.08, 0.94);
+	/* Background - dark bar */
+	cairo_set_source_rgba(cr, 0.08, 0.08, 0.08, 0.95);
 	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
 	cairo_paint(cr);
 
-	/* Rounded border */
-	cairo_set_source_rgba(cr, 0.6, 0.2, 0.2, 0.8);
-	cairo_set_line_width(cr, 2);
-	rounded_rect(cr, 1, 1, w - 2, h - 2, 10);
-	cairo_stroke(cr);
+	/* Left accent bar - full height red stripe */
+	cairo_set_source_rgba(cr, 0.8, 0.2, 0.2, 0.9);
+	cairo_rectangle(cr, 0, 0, 4, h);
+	cairo_fill(cr);
 
 	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
-	/* Title */
-	cairo_set_source_rgb(cr, 1, 0.3, 0.3);
-	cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-	cairo_set_font_size(cr, 17);
-	cairo_move_to(cr, 18, 28);
-	cairo_show_text(cr, "Config Error");
-
-	/* Underline */
-	cairo_set_source_rgba(cr, 1, 0.3, 0.3, 0.4);
-	cairo_set_line_width(cr, 1);
-	cairo_move_to(cr, 18, 34);
-	cairo_line_to(cr, w - 18, 34);
-	cairo_stroke(cr);
-
-	/* Message text (word-wrapped) */
+	/* Message text */
 	cairo_set_source_rgb(cr, 1, 1, 1);
 	cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
 	cairo_set_font_size(cr, 14);
 
-	int max_chars = (w - 36) / 7;
+	int ty = (h - 16) / 2 + 5;
+	cairo_move_to(cr, 18, ty);
+	cairo_show_text(cr, "Config Error: ");
+
+	cairo_text_extents_t te;
+	cairo_text_extents(cr, "Config Error: ", &te);
+	int label_w = te.x_advance;
+
+	cairo_set_source_rgba(cr, 1, 1, 1, 0.85);
+	int max_chars = (w - 36 - label_w) / 7;
 	if (max_chars < 10) max_chars = 10;
-	int ty = 58;
 	int line_start = 0;
 	int len = strlen(msg);
 	char *copy = strdup(msg);
 	if (!copy) { cairo_destroy(cr); cairo_surface_destroy(surface); return NULL; }
+	int first = 1;
 	for (int i = 0; i <= len; i++) {
 		if (i == len || copy[i] == '\n' || (i - line_start >= max_chars && copy[i] == ' ')) {
 			int end = (i == len || copy[i] == '\n') ? i : i;
 			char saved = copy[end];
 			copy[end] = '\0';
-			cairo_move_to(cr, 18, ty);
+			if (first) {
+				cairo_move_to(cr, 18 + label_w, ty);
+				first = 0;
+			} else {
+				cairo_move_to(cr, 18, ty);
+			}
 			cairo_show_text(cr, copy + line_start);
 			copy[end] = saved;
-			ty += 22;
+			ty += 20;
 			line_start = (copy[i] == ' ') ? i + 1 : (copy[i] == '\n') ? i + 1 : end;
-			if (ty > h - 50) break;
+			if (ty > h - 10) break;
 		}
 	}
 	free(copy);
-
-	/* Hint */
-	cairo_set_source_rgba(cr, 0.7, 0.7, 0.7, 0.7);
-	cairo_set_font_size(cr, 12);
-	cairo_move_to(cr, 18, h - 16);
-	cairo_show_text(cr, "Fix the config file and press the reload keybinding (Super+R)");
 
 	cairo_destroy(cr);
 	cairo_surface_destroy(surface);
@@ -529,7 +516,7 @@ void render_config_error(struct pudu_server *server) {
 			server->config_error_tree, NULL);
 	}
 
-	int panel_w = 600, panel_h = 200;
+	int panel_w = 1920, panel_h = 36;
 	int output_w = 1920;
 
 	struct pudu_output *output;
@@ -539,19 +526,13 @@ void render_config_error(struct pudu_server *server) {
 	}
 
 	if (output_w > 0) {
-		panel_w = output_w * 0.72;
-		if (panel_w > 720) panel_w = 720;
-		if (panel_w < 360) panel_w = 360;
+		panel_w = output_w;
 	}
-
-	panel_h = 200;
 
 	struct wlr_buffer *buf = create_error_buffer(panel_w, panel_h, server->config_error_msg);
 	if (!buf) return;
 
-	int px = (output_w - panel_w) / 2;
-	int py = 120;
-	wlr_scene_node_set_position(&server->config_error_tree->node, px, py);
+	wlr_scene_node_set_position(&server->config_error_tree->node, 0, 0);
 	wlr_scene_buffer_set_buffer(server->config_error_buf, buf);
 	wlr_buffer_drop(buf);
 	wlr_scene_node_set_enabled(&server->config_error_tree->node, true);
@@ -590,9 +571,9 @@ static bool config_parse_line(struct pudu_config *cfg,
 	return true;
 }
 
-void load_config(struct pudu_server *server) {
+bool load_config(struct pudu_server *server) {
 	const char *home = getenv("HOME");
-	if (!home) return;
+	if (!home) return false;
 
 	char config_path[512];
 	snprintf(config_path, sizeof(config_path), "%s/.config/pudu/config", home);
@@ -625,6 +606,7 @@ void load_config(struct pudu_server *server) {
 			.mod_modifier = server->mod_modifier,
 			.workspace_count = server->workspace_count,
 		};
+		memcpy(cfg.keyboard_layout, server->keyboard_layout, sizeof(cfg.keyboard_layout));
 		wl_list_init(&cfg.bindings);
 		wl_list_init(&cfg.autostarts);
 		cfg.ok = true;
@@ -751,7 +733,7 @@ void load_config(struct pudu_server *server) {
 			strncpy(server->config_error_msg, cfg.error_msg,
 				sizeof(server->config_error_msg) - 1);
 			render_config_error(server);
-			return;
+			return false;
 		}
 
 		/* Validation passed: apply config to server */
@@ -785,6 +767,8 @@ void load_config(struct pudu_server *server) {
 		server->natural_scroll = cfg.natural_scroll;
 		server->mod_modifier = cfg.mod_modifier;
 		server->workspace_count = cfg.workspace_count;
+		strncpy(server->keyboard_layout, cfg.keyboard_layout, sizeof(server->keyboard_layout) - 1);
+		server_apply_keyboard_layout(server);
 	}
 
 	struct pudu_toplevel *t;
@@ -798,4 +782,5 @@ void load_config(struct pudu_server *server) {
 	}
 
 	sync_dynamic_workspaces(server);
+	return true;
 }

@@ -246,7 +246,6 @@ int main(int argc, char *argv[]) {
 	wl_signal_add(&server.cursor->events.axis, &server.cursor_axis);
 	server.cursor_frame.notify = server_cursor_frame;
 	wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
-
 	wl_list_init(&server.keyboards);
 	server.new_input.notify = server_new_input;
 	wl_signal_add(&server.backend->events.new_input, &server.new_input);
@@ -274,12 +273,6 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	if (!wlr_backend_start(server.backend)) {
-		wlr_backend_destroy(server.backend);
-		wl_display_destroy(server.wl_display);
-		return 1;
-	}
-
 	setenv("WAYLAND_DISPLAY", socket, true);
 	setenv("XDG_CURRENT_DESKTOP", "wlroots", true);
 	setenv("XDG_SESSION_DESKTOP", "pudu", true);
@@ -291,6 +284,12 @@ int main(int argc, char *argv[]) {
 	setup_portals();
 
 	load_config(&server);
+
+	if (!wlr_backend_start(server.backend)) {
+		wlr_backend_destroy(server.backend);
+		wl_display_destroy(server.wl_display);
+		return 1;
+	}
 
 	struct wl_event_loop *loop = wl_display_get_event_loop(server.wl_display);
 	server.arrange_timer = wl_event_loop_add_timer(loop, arrange_anim_cb, &server);

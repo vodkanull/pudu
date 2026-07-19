@@ -424,7 +424,9 @@ void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	}
 	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
 
-	if (toplevel->workspace != toplevel->server->current_workspace) {
+	struct pudu_server *srv = toplevel->server;
+	bool toplevel_visible = (toplevel->workspace == srv->current_workspace);
+	if (!toplevel_visible) {
 		wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
 		struct pudu_toplevel *cur = NULL, *tmp;
 		wl_list_for_each(tmp, &toplevel->server->toplevels, link) {
@@ -573,15 +575,16 @@ void server_update_layer_visibility(struct pudu_server *server) {
 		bool fullscreen_here = false;
 		struct pudu_toplevel *t;
 		wl_list_for_each(t, &server->toplevels, link) {
-			if (t->fullscreen && t->mapped && t->workspace == server->current_workspace) {
-				struct wlr_box *geo = &t->xdg_toplevel->base->geometry;
-				double cx = t->scene_tree->node.x + geo->width / 2.0;
-				double cy = t->scene_tree->node.y + geo->height / 2.0;
-				struct wlr_output *wlr_out = wlr_output_layout_output_at(server->output_layout, cx, cy);
-				if (wlr_out == output->wlr_output) {
-					fullscreen_here = true;
-					break;
-				}
+			if (!t->fullscreen || !t->mapped) continue;
+			bool ws_visible = (t->workspace == server->current_workspace);
+			if (!ws_visible) continue;
+			struct wlr_box *geo = &t->xdg_toplevel->base->geometry;
+			double cx = t->scene_tree->node.x + geo->width / 2.0;
+			double cy = t->scene_tree->node.y + geo->height / 2.0;
+			struct wlr_output *wlr_out = wlr_output_layout_output_at(server->output_layout, cx, cy);
+			if (wlr_out == output->wlr_output) {
+				fullscreen_here = true;
+				break;
 			}
 		}
 		output_set_layer_shell_visible(output, !fullscreen_here);
@@ -727,10 +730,12 @@ void xdg_toplevel_set_parent(struct wl_listener *listener, void *data) {
 	toplevel->dialog = (xdg->parent != NULL);
 	if (toplevel->dialog && toplevel->mapped) {
 		toplevel->floating = true;
+		toplevel->arrange_animating = false;
 		wlr_xdg_toplevel_set_tiled(xdg, WLR_EDGE_NONE);
+		arrange_workspace(toplevel->server, toplevel->workspace);
 		center_toplevel(toplevel);
 		focus_toplevel(toplevel);
-		arrange_workspace(toplevel->server, toplevel->workspace);
+		wlr_xdg_surface_schedule_configure(xdg->base);
 	} else if (!toplevel->dialog && had_parent && toplevel->mapped) {
 		toplevel->floating = false;
 		arrange_workspace(toplevel->server, toplevel->workspace);

@@ -88,21 +88,22 @@ void execute_binding(struct pudu_server *server,
 		break;
 	case PUDU_ACTION_RELOAD: {
 		wlr_log(WLR_INFO, "Reloading config...");
-		load_config(server);
-		struct pudu_autostart *as;
-		wl_list_for_each(as, &server->autostarts, link) {
-			long maxfd = sysconf(_SC_OPEN_MAX);
-			if (maxfd < 0) maxfd = 1024;
-			pid_t pid = fork();
-			if (pid == 0) {
-				setsid();
-				for (int fd = 3; fd < maxfd; fd++) close(fd);
-				execl("/bin/sh", "/bin/sh", "-c", as->command, (void *)NULL);
-				_exit(1);
+		if (load_config(server)) {
+			struct pudu_autostart *as;
+			wl_list_for_each(as, &server->autostarts, link) {
+				long maxfd = sysconf(_SC_OPEN_MAX);
+				if (maxfd < 0) maxfd = 1024;
+				pid_t pid = fork();
+				if (pid == 0) {
+					setsid();
+					for (int fd = 3; fd < maxfd; fd++) close(fd);
+					execl("/bin/sh", "/bin/sh", "-c", as->command, (void *)NULL);
+					_exit(1);
+				}
+				as->pid = pid;
 			}
-			as->pid = pid;
+			arrange_workspace(server, server->current_workspace);
 		}
-		arrange_workspace(server, server->current_workspace);
 		break;
 	}
 	default:

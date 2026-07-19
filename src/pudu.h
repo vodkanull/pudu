@@ -128,6 +128,8 @@ struct pudu_toplevel {
 	/* Arrange animation (jelly snap) */
 	double arrange_from_x, arrange_from_y;
 	double arrange_to_x, arrange_to_y;
+	double arrange_from_w, arrange_from_h;
+	double arrange_to_w, arrange_to_h;
 	bool arrange_animating;
 	uint64_t arrange_anim_start;
 };
@@ -251,6 +253,7 @@ struct pudu_server {
 	bool new_is_master;
 	uint32_t mod_modifier;
 	int workspace_count;
+	char keyboard_layout[64];
 	struct wl_list bindings;
 	struct wl_list autostarts;
 
@@ -332,7 +335,6 @@ void server_cursor_motion_absolute(struct wl_listener *listener, void *data);
 void server_cursor_button(struct wl_listener *listener, void *data);
 void server_cursor_axis(struct wl_listener *listener, void *data);
 void server_cursor_frame(struct wl_listener *listener, void *data);
-
 /* Toplevel */
 void server_new_xdg_toplevel(struct wl_listener *listener, void *data);
 void server_new_xdg_popup(struct wl_listener *listener, void *data);
@@ -343,6 +345,7 @@ void toplevel_set_fullscreen(struct pudu_toplevel *toplevel, bool fullscreen);
 
 /* Layout */
 void arrange_workspace(struct pudu_server *server, int workspace);
+void arrange_workspace_on_output(struct pudu_server *server, int workspace, struct wlr_output *wlr_output);
 void cycle_focus(struct pudu_server *server);
 void swap_master(struct pudu_server *server);
 
@@ -365,6 +368,7 @@ void view_workspace(struct pudu_server *server, int workspace);
 int workspace_window_count(struct pudu_server *server, int workspace);
 void sync_dynamic_workspaces(struct pudu_server *server);
 void server_new_keyboard(struct pudu_server *server, struct wlr_input_device *device);
+void server_apply_keyboard_layout(struct pudu_server *server);
 void server_new_pointer_constraint(struct wl_listener *listener, void *data);
 void update_active_pointer_constraint(struct pudu_server *server, struct wlr_surface *surface);
 void update_workspace_ipc(struct pudu_server *server);
@@ -384,7 +388,7 @@ void seat_start_drag(struct wl_listener *listener, void *data);
 void seat_destroy_drag(struct wl_listener *listener, void *data);
 
 /* Config */
-void load_config(struct pudu_server *server);
+bool load_config(struct pudu_server *server);
 void render_config_error(struct pudu_server *server);
 void clear_config_error(struct pudu_server *server);
 bool handle_keybinding(struct pudu_server *server, xkb_keysym_t sym, uint32_t mods);

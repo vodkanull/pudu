@@ -20,6 +20,7 @@ ui {
 
 input {
     natural_scroll      true
+    # keyboard_layout    latam
 }
 
 binds {

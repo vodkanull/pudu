@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="pudu documentation — learn how to install, configure, and use this minimalist tiling Wayland compositor based on wlroots.">
+  <meta name="keywords" content="wayland, compositor, wlroots, tiling, linux, pudu, documentation">
+  <meta name="author" content="vodkanull">
+
+  <meta property="og:title" content="Documentation — pudu Wayland compositor">
+  <meta property="og:description" content="Learn how to install, configure, and use pudu, a minimalist tiling Wayland compositor based on wlroots.">
+  <meta property="og:image" content="https://pudocomp.vercel.app/media/pudu.png">
+  <meta property="og:url" content="https://pudocomp.vercel.app/docs.html">
+  <meta property="og:type" content="website">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Documentation — pudu Wayland compositor">
+  <meta name="twitter:description" content="Learn how to install, configure, and use pudu, a minimalist tiling Wayland compositor based on wlroots.">
+  <meta name="twitter:image" content="https://pudocomp.vercel.app/media/pudu.png">
+
+  <link rel="canonical" href="https://pudocomp.vercel.app/docs.html">
+  <link rel="icon" type="image/png" href="../media/pudu.png">
+
+  <title>Documentation — pudu Wayland compositor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <div class="nav-inner">
+      <a href="index.html" class="nav-logo">
+        <img src="../media/pudu.png" alt="pudu logo, a minimalist Wayland compositor" width="28">
+        pudu
+      </a>
+      <div class="nav-links">
+        <a href="docs.html" class="active">Documentation</a>
+        <a href="https://github.com/vodkanull/pudu" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="docs-layout">
+    <aside class="sidebar">
+      <nav class="sidebar-nav">
+        <a href="#getting-started">Getting Started</a>
+        <a href="#configuration">Configuration</a>
+        <a href="#keybinds">Keybinds</a>
+        <a href="#special-functions">Special Functions</a>
+        <a href="#ui-options">UI Options</a>
+        <a href="#input">Input</a>
+        <a href="#protocols">Protocols</a>
+        <a href="#contributing">Contributing</a>
+        <a href="#license">License</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <section id="getting-started" class="section">
+        <h2>Getting Started</h2>
+
+        <div class="card">
+          <h3>Installation — AUR (recommended)</h3>
+          <p>Only tested on <strong>Arch Linux</strong>. Install with your favorite AUR helper:</p>
+          <pre><code>yay -S pudu-git</code></pre>
+          <p><a href="https://aur.archlinux.org/packages/pudu-git" target="_blank" rel="noopener noreferrer">pudu-git on AUR</a></p>
+        </div>
+
+        <div class="card caution">
+          <strong>XWayland is not supported.</strong> pudu is a pure Wayland compositor.
+        </div>
+      </section>
+
+      <section id="configuration" class="section">
+        <h2>Configuration</h2>
+        <p>The configuration file is located at <code>~/.config/pudu/config</code>. It uses a simple key-value syntax.</p>
+
+        <div class="card">
+          <h3>Mod Key</h3>
+          <p>Set the mod key used for all bindings:</p>
+          <pre><code>PUDU_MOD Super</code></pre>
+          <p>Common values: <kbd>Super</kbd> (Windows key), <kbd>Alt</kbd>, <kbd>Ctrl</kbd>.</p>
+        </div>
+
+        <div class="card">
+          <h3>Autostart</h3>
+          <p>Programs to launch when pudu starts:</p>
+          <pre><code>autostart {
+    # swaybg -i ~/wallpaper.jpg -m fill
+    # waybar
+    # mako
+}</code></pre>
+        </div>
+      </section>
+
+      <section id="keybinds" class="section">
+        <h2>Keybinds</h2>
+        <p>Keybinds are defined using the <kbd>Super</kbd> key (or whatever you set in <code>PUDU_MOD</code>).</p>
+
+        <div class="card">
+          <table>
+            <thead>
+              <tr><th>Binding</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><kbd>Super</kbd> + <kbd>Enter</kbd></td><td>Open terminal (default: kitty)</td></tr>
+              <tr><td><kbd>Super</kbd> + <kbd>Left click</kbd> + drag</td><td>Move window</td></tr>
+              <tr><td><kbd>Super</kbd> + <kbd>C</kbd></td><td>Close focused window</td></tr>
+              <tr><td><kbd>Super</kbd> + <kbd>R</kbd></td><td>Reload config</td></tr>
+              <tr><td><kbd>Super</kbd> + <kbd>Escape</kbd></td><td>Exit pudu</td></tr>
+              <tr><td><kbd>Super</kbd> + <kbd>←</kbd></td><td>Previous workspace</td></tr>
+              <tr><td><kbd>Super</kbd> + <kbd>→</kbd></td><td>Next workspace</td></tr>
+              <tr><td><kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>←</kbd></td><td>Move window to previous workspace</td></tr>
+              <tr><td><kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>→</kbd></td><td>Move window to next workspace</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="special-functions" class="section">
+        <h2>Special Functions</h2>
+        <p>These built-in actions can be assigned to keybinds in the <code>binds</code> block:</p>
+
+        <div class="card">
+          <table>
+            <thead>
+              <tr><th>Function</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>PUDU_MOD</code></td><td>Sets the modifier key (e.g., <code>Super</code>, <code>Alt</code>)</td></tr>
+              <tr><td><code>PUDU_CLOSE</code></td><td>Close the focused window</td></tr>
+              <tr><td><code>PUDU_EXIT</code></td><td>Exit the compositor</td></tr>
+              <tr><td><code>PUDU_RELOAD</code></td><td>Reload config (kills autostarts, reloads, re-runs autostarts)</td></tr>
+              <tr><td><code>PUDU_WORKSPACE_PREV</code></td><td>Switch to the previous workspace</td></tr>
+              <tr><td><code>PUDU_WORKSPACE_NEXT</code></td><td>Switch to the next workspace</td></tr>
+              <tr><td><code>PUDU_WORKSPACE_MOVE_PREV</code></td><td>Move focused window to the previous workspace</td></tr>
+              <tr><td><code>PUDU_WORKSPACE_MOVE_NEXT</code></td><td>Move focused window to the next workspace</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Example usage in <code>binds</code>:</p>
+        <pre><code>binds {
+    Super+Return         kitty
+
+    Super+r              PUDU_RELOAD
+    Super+c              PUDU_CLOSE
+    Super+Escape         PUDU_EXIT
+
+    Super+Left           PUDU_WORKSPACE_PREV
+    Super+Right          PUDU_WORKSPACE_NEXT
+    Super+Shift+Left     PUDU_WORKSPACE_MOVE_PREV
+    Super+Shift+Right    PUDU_WORKSPACE_MOVE_NEXT
+}</code></pre>
+      </section>
+
+      <section id="ui-options" class="section">
+        <h2>UI Options</h2>
+
+        <div class="card">
+          <h3>Example</h3>
+          <pre><code>ui {
+    inner_gap           8
+    outer_gap           8
+    border_size         2
+    border_radius       8
+    border_active       #c574dd
+    border_inactive     #3e304c
+    border_transition   100
+    new_is_master       false
+    workspace_count     5
+}</code></pre>
+          <table>
+            <thead>
+              <tr><th>Option</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>inner_gap</code></td><td>Gap between windows (px)</td></tr>
+              <tr><td><code>outer_gap</code></td><td>Gap around the screen edges (px)</td></tr>
+              <tr><td><code>border_size</code></td><td>Width of window borders (px)</td></tr>
+              <tr><td><code>border_radius</code></td><td>Window corner radius (px)</td></tr>
+              <tr><td><code>border_active</code></td><td>Border color for the active window</td></tr>
+              <tr><td><code>border_inactive</code></td><td>Border color for inactive windows</td></tr>
+              <tr><td><code>border_transition</code></td><td>Border color transition speed (ms)</td></tr>
+              <tr><td><code>new_is_master</code></td><td>New windows open as master</td></tr>
+              <tr><td><code>workspace_count</code></td><td>Number of workspaces</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="input" class="section">
+        <h2>Input</h2>
+
+        <div class="card">
+          <pre><code>input {
+    natural_scroll      true
+    # keyboard_layout    latam
+}</code></pre>
+          <table>
+            <thead>
+              <tr><th>Option</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>natural_scroll</code></td><td>Enable natural (reverse) scrolling</td></tr>
+              <tr><td><code>keyboard_layout</code></td><td>Keyboard layout (e.g., <code>latam</code>, <code>us</code>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="protocols" class="section">
+        <h2>Supported Wayland Protocols</h2>
+
+        <div class="card">
+          <table>
+            <thead>
+              <tr><th>Protocol</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>xdg-shell</code></td><td>Standard window support</td></tr>
+              <tr><td><code>wlr-layer-shell-unstable-v1</code></td><td>Bars (Waybar), wallpapers (swaybg), etc.</td></tr>
+              <tr><td><code>wlr-screencopy-v1</code></td><td>Screenshots and single-frame capture</td></tr>
+              <tr><td><code>wlr-export-dmabuf-v1</code></td><td>Efficient video capture via DMA-BUF</td></tr>
+              <tr><td><code>ext-session-lock-v1</code></td><td>Secure session locking (e.g. swaylock)</td></tr>
+              <tr><td><code>ext-workspace-v1</code></td><td>Workspace-aware bars and taskbars</td></tr>
+              <tr><td><code>wlr-pointer-constraints-v1</code></td><td>Locking/confining the mouse pointer</td></tr>
+              <tr><td><code>wlr-foreign-toplevel-management-v1</code></td><td>Taskbars and window switchers</td></tr>
+              <tr><td><code>wlr-xdg-output-v1</code></td><td>Better multi-monitor support</td></tr>
+              <tr><td><code>wlr-xdg-decoration-v1</code></td><td>Window decorations</td></tr>
+              <tr><td><code>wlr-data-control-v1</code></td><td>Clipboard managers</td></tr>
+              <tr><td><code>wlr-gamma-control-v1</code></td><td>Gamma/LUT adjustments</td></tr>
+              <tr><td><code>subcompositor</code></td><td>Subsurface placement</td></tr>
+              <tr><td><code>xdg-activation-v1</code></td><td>Application startup and window activation</td></tr>
+              <tr><td><code>ext-idle-notify-v1</code></td><td>Idle inhibition and idle notification</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="contributing" class="section">
+        <h2>Contributing</h2>
+        <div class="card">
+          <p>If you find a bug, have a suggestion, or just want to share your thoughts, feel free to <strong>open an issue</strong> on GitHub.</p>
+          <p>Pull requests are not accepted — this is a personal hobby project.</p>
+        </div>
+      </section>
+
+      <section id="license" class="section">
+        <h2>License</h2>
+        <div class="card">
+          <p>pudu is made in 🇨🇱 and is under the <strong>GPL v3.0</strong> license.</p>
+          <p>See the <a href="https://github.com/vodkanull/pudu/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">LICENSE</a> file for details.</p>
+        </div>
+      </section>
+
+      <footer>
+        <p>pudu &mdash; a hobby project by <a href="https://github.com/vodkanull" target="_blank" rel="noopener noreferrer">vodkanull</a></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

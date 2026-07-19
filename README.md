@@ -24,11 +24,12 @@
 
 ### AUR (recommended)
 
-With an **AUR helper** (`yay`):
+With an **AUR helper** (`yay/paru`):
 
 ```bash
 yay -S pudu-git
 ```
+See more [here](https://aur.archlinux.org/packages/pudu-git)
 
 ## Configuration
 
@@ -40,7 +41,7 @@ yay -S pudu-git
 >
 > The configuration file is located at **`~/.config/pudu/config`**.
 >
-> See an example config 👉 [here](https://github.com/vodkanull/pudu/blob/main/src/config) 👈.
+> See an example config 👉 [here](https://github.com/vodkanull/pudu/blob/main/src/config) 👈
 
 <div align="center">
 
@@ -54,10 +55,14 @@ yay -S pudu-git
 >
 > If you find a bug, have a suggestion, or just want to share your thoughts, feel free to **open an issue**.
 > Pull requests are **not accepted** (this is a personal hobby project).
+>
+> For a list of supported Wayland protocols see [PROTOCOLS.md](./PROTOCOLS.md).
+> For the full release history see [CHANGELOGS.md](./CHANGELOGS.md).
 
 <!--
 <video src="https://github.com/user-attachments/assets/c6b639f0-cfee-4a8a-bd6e-3c1cb852b7e8" autoplay loop muted playsinline width="100%"></video>
 -->
+
 
 ## License
 🦌 Pudu is made in 🇨🇱 and is under the GPL v3.0 license.
