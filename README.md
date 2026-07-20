@@ -22,7 +22,7 @@
 > [!IMPORTANT]  
 > Only tested on **Arch Linux**. Other distributions may work but are untested.  
 
-### AUR (recommended)
+### Arch
 
 With an **AUR helper** (`yay/paru`):
 
@@ -30,6 +30,26 @@ With an **AUR helper** (`yay/paru`):
 yay -S pudu-git
 ```
 See more [here](https://aur.archlinux.org/packages/pudu-git)
+
+### Void Linux
+
+Install the build dependencies:
+
+```bash
+sudo xbps-install -S base-devel pkg-config wayland-devel wlroots-0.19-devel \
+  libxkbcommon-devel cairo-devel libinput-devel pixman-devel
+```
+
+Clone, build, and install:
+
+```bash
+git clone https://github.com/vodkanull/pudu.git
+cd pudu/src
+make
+sudo make install
+```
+
+The binary will be placed at `/usr/local/bin/pudu` and the desktop entry at `/usr/share/wayland-sessions/pudu.desktop`.
 
 ## Configuration
 
