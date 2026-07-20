@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://pudocomp.vercel.app/sitemap.xml
