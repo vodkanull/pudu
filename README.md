@@ -20,7 +20,7 @@
 > XWayland is **not supported** and this is intentional. pudu is a pure Wayland compositor.
 
 > [!IMPORTANT]  
-> Only tested on **Arch Linux**. Other distributions may work but are untested.  
+> Only tested on **Arch Linux** and **Void Linux**. Other distributions may work but are untested.  
 
 ### Arch
 
@@ -33,11 +33,35 @@ See more [here](https://aur.archlinux.org/packages/pudu-git)
 
 ### Void Linux
 
-Install the build dependencies:
+Install build dependencies:
 
 ```bash
-sudo xbps-install -S base-devel pkg-config wayland-devel wlroots-0.19-devel \
-  libxkbcommon-devel cairo-devel libinput-devel pixman-devel
+sudo xbps-install -S base-devel pkg-config wayland-devel wayland-protocols wlroots0.19-devel libxkbcommon-devel cairo-devel libinput-devel pixman-devel
+```
+
+Install runtime dependencies (GPU drivers, seat management):
+
+```bash
+sudo xbps-install -S seatd dbus mesa-dri vulkan-loader
+```
+
+For **AMD GPUs**, also install:
+
+```bash
+sudo xbps-install -S mesa-vulkan-radeon linux-firmware-amd
+```
+
+Add your user to the required groups:
+
+```bash
+sudo usermod -aG video,input,_seatd $USER
+```
+
+Enable seatd and dbus:
+
+```bash
+sudo ln -s /etc/sv/seatd /var/service/
+sudo ln -s /etc/sv/dbus /var/service/
 ```
 
 Clone, build, and install:

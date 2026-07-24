@@ -141,12 +141,15 @@ int main(int argc, char *argv[]) {
 		wl_display_get_event_loop(server.wl_display), NULL);
 	if (server.backend == NULL) {
 		wlr_log(WLR_ERROR, "failed to create wlr_backend");
+		wl_display_destroy(server.wl_display);
 		return 1;
 	}
 
 	server.renderer = wlr_renderer_autocreate(server.backend);
 	if (server.renderer == NULL) {
 		wlr_log(WLR_ERROR, "failed to create wlr_renderer");
+		wlr_backend_destroy(server.backend);
+		wl_display_destroy(server.wl_display);
 		return 1;
 	}
 
@@ -156,6 +159,9 @@ int main(int argc, char *argv[]) {
 		server.renderer);
 	if (server.allocator == NULL) {
 		wlr_log(WLR_ERROR, "failed to create wlr_allocator");
+		wlr_renderer_destroy(server.renderer);
+		wlr_backend_destroy(server.backend);
+		wl_display_destroy(server.wl_display);
 		return 1;
 	}
 
@@ -269,7 +275,10 @@ int main(int argc, char *argv[]) {
 
 	const char *socket = wl_display_add_socket_auto(server.wl_display);
 	if (!socket) {
+		wlr_allocator_destroy(server.allocator);
+		wlr_renderer_destroy(server.renderer);
 		wlr_backend_destroy(server.backend);
+		wl_display_destroy(server.wl_display);
 		return 1;
 	}
 
@@ -286,6 +295,8 @@ int main(int argc, char *argv[]) {
 	load_config(&server);
 
 	if (!wlr_backend_start(server.backend)) {
+		wlr_allocator_destroy(server.allocator);
+		wlr_renderer_destroy(server.renderer);
 		wlr_backend_destroy(server.backend);
 		wl_display_destroy(server.wl_display);
 		return 1;
