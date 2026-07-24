@@ -20,6 +20,50 @@ static pid_t spawn(const char *cmd) {
 	return pid;
 }
 
+static void setup_dbus(void) {
+	const char *addr = getenv("DBUS_SESSION_BUS_ADDRESS");
+	if (addr && *addr) {
+		wlr_log(WLR_INFO, "setup_dbus: already have session bus on %s", addr);
+		return;
+	}
+
+	int pipefd[2];
+	if (pipe(pipefd) != 0) {
+		wlr_log(WLR_ERROR, "setup_dbus: pipe failed");
+		return;
+	}
+
+	pid_t pid = fork();
+	if (pid == 0) {
+		close(pipefd[0]);
+		dup2(pipefd[1], STDOUT_FILENO);
+		close(pipefd[1]);
+		execlp("dbus-daemon", "dbus-daemon", "--session", "--print-address=1", "--nofork", (void *)NULL);
+		_exit(1);
+	}
+
+	close(pipefd[1]);
+
+	char buf[4096] = {0};
+	ssize_t n = read(pipefd[0], buf, sizeof(buf) - 1);
+	close(pipefd[0]);
+
+	if (n > 0) {
+		buf[n] = '\0';
+		char *nl = strchr(buf, '\n');
+		if (nl) *nl = '\0';
+		if (strlen(buf) > 0) {
+			setenv("DBUS_SESSION_BUS_ADDRESS", buf, 1);
+			wlr_log(WLR_INFO, "setup_dbus: started session bus on %s", buf);
+		}
+	} else {
+		wlr_log(WLR_ERROR, "setup_dbus: failed to read dbus address");
+	}
+
+	/* Don't wait — child (dbus-daemon --nofork) keeps running.
+	 * SIGCHLD=IGN reaps it when pudu exits. */
+}
+
 static void setup_portals(void) {
 	const char *home = getenv("HOME");
 	if (!home) return;
@@ -290,6 +334,7 @@ int main(int argc, char *argv[]) {
 	spawn("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE 2>/dev/null || true");
 	spawn("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE 2>/dev/null || true");
 
+	setup_dbus();
 	setup_portals();
 
 	load_config(&server);

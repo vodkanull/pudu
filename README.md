@@ -36,13 +36,7 @@ See more [here](https://aur.archlinux.org/packages/pudu-git)
 Install build dependencies:
 
 ```bash
-sudo xbps-install -S base-devel pkg-config wayland-devel wayland-protocols wlroots0.19-devel libxkbcommon-devel cairo-devel libinput-devel pixman-devel
-```
-
-Install runtime dependencies (GPU drivers, seat management):
-
-```bash
-sudo xbps-install -S seatd dbus mesa-dri vulkan-loader
+sudo xbps-install -S base-devel pkg-config wayland-devel wayland-protocols wlroots0.19-devel libxkbcommon-devel cairo-devel libinput-devel pixman-devel seatd dbus mesa-dri vulkan-loader
 ```
 
 For **AMD GPUs**, also install:
@@ -51,15 +45,11 @@ For **AMD GPUs**, also install:
 sudo xbps-install -S mesa-vulkan-radeon linux-firmware-amd
 ```
 
-Add your user to the required groups:
+Add your user to the required groups and enable seatd and dbus:
 
 ```bash
 sudo usermod -aG video,input,_seatd $USER
-```
 
-Enable seatd and dbus:
-
-```bash
 sudo ln -s /etc/sv/seatd /var/service/
 sudo ln -s /etc/sv/dbus /var/service/
 ```
@@ -74,6 +64,13 @@ sudo make install
 ```
 
 The binary will be placed at `/usr/local/bin/pudu` and the desktop entry at `/usr/share/wayland-sessions/pudu.desktop`.
+
+> [!IMPORTANT]
+> On Void Linux, D-Bus does not start automatically for the user session. If you are **not using a display manager**, wrap pudu with `dbus-run-session`:
+>
+> ```bash
+> dbus-run-session pudu
+> ```
 
 ## Configuration
 
